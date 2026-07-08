@@ -14,7 +14,7 @@ except ModuleNotFoundError:
 MAGIC = 0xAA55
 VERSION = 1
 
-TYPE_SENSOR = 0x01
+TYPE_SENSOR = 0x10  # Runway.Protocol.MessageType.Telemetry
 
 
 @dataclass(slots=True)
@@ -45,7 +45,10 @@ def encode_sensor(data: SensorData) -> bytes:
 
 def encode_packet(packet_type: int, sequence: int, payload: bytes) -> bytes:
 
-    header = struct.pack("<HBBHH", MAGIC, VERSION, packet_type, sequence, len(payload))
+    # magic — фиксированные байты AA 55 (не «<H» от MAGIC: little-endian дал бы 55 AA)
+    header = bytes([0xAA, 0x55]) + struct.pack(
+        "<BBHH", VERSION, packet_type, sequence, len(payload)
+    )
 
     crc = crc16(header + payload)
 
