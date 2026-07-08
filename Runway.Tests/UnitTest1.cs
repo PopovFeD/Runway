@@ -1,6 +1,7 @@
 ﻿using System.Text;
 using Runway.Framing;
 using Runway.Protocol;
+using Runway.Tests.Support;
 
 namespace Runway.Tests;
 
@@ -30,7 +31,7 @@ public class FrameAndCrcTests
     public void Append_ReturnsParsedFrame_WhenFrameIsComplete()
     {
         byte[] payload = { 0x01, 0x02, 0x03, 0x04 };
-        byte[] frameBytes = BuildFrameBytes(
+        byte[] frameBytes = FrameTestHelper.BuildFrameBytes(
             version: 0x10,
             messageType: 0x20,
             sequence: 0x1234,
@@ -51,7 +52,7 @@ public class FrameAndCrcTests
     public void Append_CollectsFrame_WhenBytesArriveInParts()
     {
         byte[] payload = { 0xAA, 0xBB };
-        byte[] frameBytes = BuildFrameBytes(
+        byte[] frameBytes = FrameTestHelper.BuildFrameBytes(
             version: 0x01,
             messageType: 0x02,
             sequence: 0x0007,
@@ -70,29 +71,5 @@ public class FrameAndCrcTests
         Assert.Equal((byte)0x02, frame.MessageType);
         Assert.Equal((ushort)0x0007, frame.Sequence);
         Assert.Equal(payload, frame.Payload);
-    }
-
-    private static byte[] BuildFrameBytes(
-        byte version,
-        byte messageType,
-        ushort sequence,
-        byte[] payload
-    )
-    {
-        List<byte> frameBytes = new();
-        frameBytes.AddRange(FrameHeader.Magic);
-        frameBytes.Add(version);
-        frameBytes.Add(messageType);
-        frameBytes.Add((byte)(sequence & 0xFF));
-        frameBytes.Add((byte)((sequence >> 8) & 0xFF));
-        frameBytes.Add((byte)(payload.Length & 0xFF));
-        frameBytes.Add((byte)((payload.Length >> 8) & 0xFF));
-        frameBytes.AddRange(payload);
-
-        ushort crc = Crc16.Compute(frameBytes.ToArray());
-        frameBytes.Add((byte)(crc & 0xFF));
-        frameBytes.Add((byte)((crc >> 8) & 0xFF));
-
-        return frameBytes.ToArray();
     }
 }

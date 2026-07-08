@@ -1,3 +1,4 @@
+// CRC – защита от случайного совпадения с Magic
 namespace Runway.Protocol;
 
 public static class Crc16
