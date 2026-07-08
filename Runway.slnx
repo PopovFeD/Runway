@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Runway.Tests/Runway.Tests.csproj" />
+  <Project Path="Runway/Runway.csproj" />
+</Solution>
