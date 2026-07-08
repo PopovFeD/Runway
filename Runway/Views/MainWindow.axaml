@@ -1,0 +1,14 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Runway.ViewModels"
+        x:Class="Runway.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="Runway">
+
+    <DockPanel Margin="8">
+        <TextBlock DockPanel.Dock="Top" Text="{Binding Greeting}" Margin="0,0,0,8"/>
+        <ListBox ItemsSource="{Binding LogEntries}"/>
+    </DockPanel>
+
+</Window>
