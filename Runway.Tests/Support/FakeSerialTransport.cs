@@ -11,10 +11,14 @@ public class FakeSerialTransport : ISerialTransport
     public bool IsOpen { get; private set; }
 
     public event Action<byte[]>? DataReceived;
+    public event Action<ConnectionState>? ConnectionStateChanged;
 
     public void Open(string portName, int baudRate) => IsOpen = true;
 
     public void Close() => IsOpen = false;
 
     public void RaiseDataReceived(byte[] bytes) => DataReceived?.Invoke(bytes);
+
+    public void RaiseConnectionStateChanged(ConnectionState state) =>
+        ConnectionStateChanged?.Invoke(state);
 }

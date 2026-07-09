@@ -7,6 +7,9 @@
 - [x] protocol.md
 - [ ] settings.md
 - [ ] viewmodels.md (MainWindowViewModel, ViewLocator, связь с GUI)
+- [ ] logging.md — телеметрийный лог (LogFileWriter/BoundedLog) vs
+      diagnostics-лог (Microsoft.Extensions.Logging/FileLoggerProvider),
+      почему их два и почему не Serilog/NLog
 - [ ] storage.md — когда появится сам слой хранения
 - [ ] README.md-индекс по Misc/docs/, когда наберётся достаточно файлов
 
@@ -17,8 +20,13 @@
 - [x] разделить read-поток и обработку через очередь
       (`System.Threading.Channels.Channel<Frame>`), иначе запись в БД
       будет тормозить чтение с порта
-- [ ] ограничить/очищать `LogEntries` (сейчас растёт бесконечно)
-- [ ] переподключение при разрыве порта + индикация разрыва в GUI
+- [x] ограничить/очищать `LogEntries` (сейчас растёт бесконечно) —
+      `BoundedLog` в GUI (капается по `MaxLogEntries`), полный лог
+      всё равно пишется в файл (`LogFileWriter`, без ограничений)
+- [x] переподключение при разрыве порта + индикация разрыва в GUI —
+      `SerialTransport.RunLoop` переоткрывает порт с паузой
+      (`ReconnectDelaySeconds`), `ConnectionStateChanged` прокинуто
+      в `MainWindowViewModel.ConnectionStatus` и забиндено в GUI
 - [ ] забиндить `AvailablePorts` в `MainWindow.axaml` вместо жёсткого
       порта из `settings.json`
 - [ ] `PacketParser.Parse` — уйти от `object` к типизированной иерархии
@@ -31,6 +39,16 @@
       (см. баг с `TYPE_SENSOR`/magic из 2026.07.08.md)
 - [ ] `FrameReader._buffer` на `List<byte>` — пересмотреть, если трафик
       станет высокочастотным (сейчас O(n) на `RemoveRange`)
+- [ ] сам цикл переподключения в `SerialTransport` (открытие/переоткрытие
+      реального `SerialPort`) не покрыт автотестами — только реакция
+      `MainWindowViewModel` на уже случившееся событие. Если понадобится
+      закрыть и это — придётся вводить абстракцию над `SerialPort`
+      (`ISerialPortFactory` или похожую) ради фейка; com0com для этого
+      не подходит (виртуальная пара портов не эмулирует физический разрыв)
+- [ ] версии пакетов `Microsoft.Extensions.Logging`/`.Console` в
+      `Runway.csproj` (`10.0.0`) проставлены по аналогии с
+      `System.IO.Ports` не глядя в NuGet (сети не было) — проверить
+      при первом `dotnet restore` и поправить, если предложит другую
 
 ## Общие вопросы (перенесено из старого TODO)
 

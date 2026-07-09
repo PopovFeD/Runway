@@ -13,4 +13,12 @@ public class AppSettings
     // Сколько последних строк держать в GUI (LogEntries). Полный лог всегда пишется
     // в LogFilePath целиком — ограничение касается только памяти процесса.
     public int MaxLogEntries { get; set; } = 500;
+
+    // Путь к файлу diagnostics-лога (Microsoft.Extensions.Logging, см. FileLoggerProvider).
+    // Отдельно от LogFilePath: там данные телеметрии, тут — события уровня приложения
+    // (разрыв порта, попытки переподключения), их принципиально не стоит мешать в одном файле.
+    public string DiagnosticsLogFilePath { get; set; } = "runway.diagnostics.log";
+
+    // Пауза перед очередной попыткой переподключиться после разрыва порта.
+    public int ReconnectDelaySeconds { get; set; } = 2;
 }

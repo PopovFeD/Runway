@@ -5,22 +5,17 @@ namespace Runway.Logging;
 // Пишет полный, ничем не ограниченный лог принятых кадров на диск.
 // В отличие от LogEntries в GUI (см. BoundedLog), тут ничего не обрезается —
 // заводить SQLite ради одного этого пока преждевременно, а обычный append-only
-// файл почти ничего не стоит по памяти процесса.
+// файл почти ничего не стоит по памяти процесса. Это лог ДАННЫХ (телеметрия),
+// а не диагностики приложения — события вроде переподключения порта идут через
+// Microsoft.Extensions.Logging (см. FileLoggerProvider) в отдельный файл, чтобы
+// не путать одно с другим в одном потоке строк.
 public class LogFileWriter : ILogFileWriter
 {
-    private readonly StreamWriter _writer;
+    private readonly AppendOnlyFile _file;
 
     public LogFileWriter(string filePath)
     {
-        string? directory = Path.GetDirectoryName(filePath);
-        if (!string.IsNullOrEmpty(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
-        // AutoFlush — чтобы после аварийного завершения процесса на диске осталось
-        // всё, что успело прийти, а не только то, что попало во внутренний буфер.
-        _writer = new StreamWriter(filePath, append: true) { AutoFlush = true };
+        _file = new AppendOnlyFile(filePath);
     }
 
     public void WriteLine(string line)
@@ -32,11 +27,11 @@ public class LogFileWriter : ILogFileWriter
             "yyyy-MM-dd HH:mm:ss.fff",
             CultureInfo.InvariantCulture
         );
-        _writer.WriteLine($"{timestamp}  {line}");
+        _file.WriteLine($"{timestamp}  {line}");
     }
 
     public void Dispose()
     {
-        _writer.Dispose();
+        _file.Dispose();
     }
 }
