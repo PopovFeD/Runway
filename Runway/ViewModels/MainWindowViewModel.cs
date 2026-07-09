@@ -2,9 +2,10 @@
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
-using Avalonia.Threading;
 using Runway.Framing;
+using Runway.Logging;
 using Runway.Protocol;
+using Runway.Threading;
 using Runway.Transport;
 
 namespace Runway.ViewModels;
@@ -14,6 +15,9 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly FrameReader _frameReader;
     private readonly ISerialTransport _transport;
     private readonly IPortLister _portLister;
+    private readonly ILogFileWriter _logFileWriter;
+    private readonly IUiDispatcher _uiDispatcher;
+    private readonly BoundedLog _boundedLog;
 
     // Очередь между read-потоком порта (продюсер) и разбором пакетов (консьюмер).
     // Смысл: OnDataReceived вызывается прямо из фонового потока SerialTransport.ReadLoop,
@@ -32,12 +36,18 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     public MainWindowViewModel(
         FrameReader frameReader,
         ISerialTransport transport,
-        IPortLister portLister
+        IPortLister portLister,
+        ILogFileWriter logFileWriter,
+        IUiDispatcher uiDispatcher,
+        int maxLogEntries = 500
     )
     {
         _frameReader = frameReader;
         _transport = transport;
         _portLister = portLister;
+        _logFileWriter = logFileWriter;
+        _uiDispatcher = uiDispatcher;
+        _boundedLog = new BoundedLog(LogEntries, maxLogEntries);
 
         _transport.DataReceived += OnDataReceived;
         _processingTask = Task.Run(() => ProcessFramesAsync(_processingCts.Token));
@@ -46,7 +56,8 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     public string Greeting => "Welcome to Avalonia!";
     public IReadOnlyList<string> AvailablePorts => _portLister.GetAvailablePorts();
 
-    // Сюда GUI будет смотреть, чтобы показать лог принятых кадров
+    // Сюда GUI смотрит, чтобы показать лог принятых кадров. Ограничена по размеру
+    // через _boundedLog — полный, неограниченный лог всегда есть в файле (LogFileWriter).
     public ObservableCollection<string> LogEntries { get; } = new();
 
     // Вызывается напрямую из read-потока SerialTransport (см. SerialTransport.ReadLoop).
@@ -91,9 +102,13 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                         $"Seq={frame.Sequence}  Type=0x{frame.MessageType:X2}  ParseError: {ex.Message}";
                 }
 
-                // LogEntries привязана к GUI — трогать её можно только из UI-потока.
-                // Dispatcher.UIThread.Post перекладывает это действие туда.
-                Dispatcher.UIThread.Post(() => LogEntries.Add(line));
+                // Полный лог — на диск, без ограничений по размеру. Мы уже не в
+                // read-потоке порта, так что запись на диск ему не мешает.
+                _logFileWriter.WriteLine(line);
+
+                // В GUI — с ограничением через BoundedLog, чтобы не тормозить ListBox
+                // и не есть память сколь угодно долго работающей сессии.
+                _uiDispatcher.Post(() => _boundedLog.Add(line));
             }
         }
         catch (OperationCanceledException)
@@ -104,6 +119,8 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
     // Останавливает консьюмера и отписывается от порта. Вызывается из App при выходе
     // из приложения (см. App.axaml.cs), чтобы не оставлять висящую фоновую задачу.
+    // LogFileWriter здесь намеренно не закрывается — им управляет тот, кто его создал
+    // (App.axaml.cs), по аналогии с transport/portLister, которыми VM тоже не владеет.
     public void Dispose()
     {
         _transport.DataReceived -= OnDataReceived;

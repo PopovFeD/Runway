@@ -3,7 +3,9 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Runway.Framing;
+using Runway.Logging;
 using Runway.Settings;
+using Runway.Threading;
 using Runway.Transport;
 using Runway.ViewModels;
 using Runway.Views;
@@ -28,14 +30,33 @@ public partial class App : Application
             var transport = new SerialTransport();
             var portLister = new SerialPortLister();
 
+            // Path.Combine с AppContext.BaseDirectory — чтобы лог-файл не "терялся"
+            // в зависимости от того, откуда запущен процесс (тот же класс проблемы,
+            // что уже отмечен для settings.json в Misc/diary/2026.07.08-code-review.md).
+            var logFilePath = Path.Combine(AppContext.BaseDirectory, settings.LogFilePath);
+            var logFileWriter = new LogFileWriter(logFilePath);
+            var uiDispatcher = new AvaloniaUiDispatcher();
+
             // Конструктор ViewModel уже подписывается на transport.DataReceived
-            var mainViewModel = new MainWindowViewModel(frameReader, transport, portLister);
+            var mainViewModel = new MainWindowViewModel(
+                frameReader,
+                transport,
+                portLister,
+                logFileWriter,
+                uiDispatcher,
+                settings.MaxLogEntries
+            );
 
             transport.Open(settings.PortName, settings.BaudRate);
 
-            // Останавливаем консьюмера очереди кадров (см. MainWindowViewModel.Dispose),
-            // чтобы фоновая задача разбора не осталась висеть после закрытия окна.
-            desktop.Exit += (_, _) => mainViewModel.Dispose();
+            // Останавливаем консьюмера очереди кадров (см. MainWindowViewModel.Dispose)
+            // и только потом закрываем лог-файл — порядок важен, иначе можно словить
+            // запись в уже закрытый StreamWriter.
+            desktop.Exit += (_, _) =>
+            {
+                mainViewModel.Dispose();
+                logFileWriter.Dispose();
+            };
 
             desktop.MainWindow = new MainWindow { DataContext = mainViewModel };
         }
