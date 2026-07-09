@@ -153,6 +153,30 @@ public class MainWindowViewModelConnectionCommandsTests
         vm.Dispose();
     }
 
+    [Fact]
+    public void StatusText_ShowsActiveTransportAndEndpoint_NotCurrentSelection()
+    {
+        var serial = new FakeTransport("COM3") { DisplayName = "Serial" };
+        var wifi = new FakeTransport("192.168.1.42:3333") { DisplayName = "WiFi" };
+        var vm = CreateViewModel(new[] { serial, wifi });
+
+        Assert.Equal("Отключено", vm.StatusText);
+
+        vm.ConnectCommand.Execute(null);
+        serial.RaiseConnectionStateChanged(ConnectionState.Connected);
+        Assert.Equal("Подключено: Serial · COM3", vm.StatusText);
+
+        // Пользователь листает список — реальное соединение не меняется,
+        // и индикатор продолжает показывать его, а не текущий выбор.
+        vm.SelectedTransport = wifi;
+        Assert.Equal("Подключено: Serial · COM3", vm.StatusText);
+
+        vm.DisconnectCommand.Execute(null);
+        Assert.Equal("Отключено", vm.StatusText);
+
+        vm.Dispose();
+    }
+
     private static MainWindowViewModel CreateViewModel(
         FakeTransport[] transports,
         string? initialEndpoint = null

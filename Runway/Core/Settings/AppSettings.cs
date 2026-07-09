@@ -25,4 +25,7 @@ public class AppSettings
 
     // Пауза перед очередной попыткой переподключиться после разрыва порта.
     public int ReconnectDelaySeconds { get; set; } = 2;
+
+    // Путь к SQLite-файлу с телеметрией (относительно каталога сборки, как и логи).
+    public string DatabaseFilePath { get; set; } = "runway.db";
 }

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Runway.Framing;
 using Runway.Logging;
 using Runway.Settings;
+using Runway.Storage;
 using Runway.Threading;
 using Runway.Transport;
 using Runway.ViewModels;
@@ -72,11 +73,16 @@ public partial class App : Application
             // Конструктор ViewModel уже подписывается на события всех транспортов.
             // Автоподключения при старте больше нет — порт выбирается в GUI,
             // PortName из настроек лишь предвыбирается в списке, если он есть.
+            var telemetryStore = new SqliteTelemetryStore(
+                Path.Combine(AppContext.BaseDirectory, settings.DatabaseFilePath)
+            );
+
             var mainViewModel = new MainWindowViewModel(
                 frameReader,
                 transports,
                 logFileWriter,
                 uiDispatcher,
+                telemetryStore,
                 settings.MaxLogEntries,
                 initialEndpoint: settings.PortName
             );
@@ -95,6 +101,7 @@ public partial class App : Application
                 {
                     transport.Close();
                 }
+                telemetryStore.Dispose();
                 logFileWriter.Dispose();
                 loggerFactory.Dispose();
             };

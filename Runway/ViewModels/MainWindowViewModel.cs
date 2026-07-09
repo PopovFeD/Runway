@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using Runway.Framing;
 using Runway.Logging;
 using Runway.Protocol;
+using Runway.Storage;
 using Runway.Threading;
 using Runway.Transport;
 
@@ -24,6 +25,13 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     // другой транспорт, пока активный ещё подключён (Connect до этого не дойдёт —
     // кнопка выключена, — но выбор в ComboBox уже поменяется).
     private ITransport? _activeTransport;
+
+    // Точка, к которой реально подключены (для индикатора StatusText) — выбор
+    // в ComboBox может уже уехать на другой транспорт/порт, индикатор не должен.
+    private string? _activeEndpoint;
+
+    // Хранилище телеметрии; null — работаем без БД (например, в части тестов).
+    private readonly ITelemetryStore? _telemetryStore;
 
     // Очередь между read-потоком порта (продюсер) и разбором пакетов (консьюмер).
     // Смысл: OnDataReceived вызывается прямо из фонового потока SerialTransport.ReadLoop,
@@ -48,6 +56,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         IReadOnlyList<ITransport> transports,
         ILogFileWriter logFileWriter,
         IUiDispatcher uiDispatcher,
+        ITelemetryStore? telemetryStore = null,
         int maxLogEntries = 500,
         string? initialEndpoint = null
     )
@@ -64,6 +73,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         Transports = transports;
         _logFileWriter = logFileWriter;
         _uiDispatcher = uiDispatcher;
+        _telemetryStore = telemetryStore;
         _boundedLog = new BoundedLog(LogEntries, maxLogEntries);
 
         // Напрямую в поле, не через свойство: сеттер SelectedTransport дёргает
@@ -148,9 +158,29 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                 // Доступность кнопок зависит от статуса — пересчитываем при каждой смене
                 ConnectCommand.NotifyCanExecuteChanged();
                 DisconnectCommand.NotifyCanExecuteChanged();
+                OnPropertyChanged(nameof(StatusText));
             }
         }
     }
+
+    // Индикатор для GUI: не только состояние, но и К ЧЕМУ оно относится.
+    // Выбор в ComboBox — это намерение, а не факт: пользователь может листать
+    // список транспортов/портов, не трогая живое подключение, и индикатор
+    // продолжает показывать реальное соединение, а не текущий выбор.
+    public string StatusText =>
+        _activeTransport == null
+            ? "Отключено"
+            : ConnectionStatus switch
+            {
+                ConnectionState.Connected =>
+                    $"Подключено: {_activeTransport.DisplayName} · {_activeEndpoint}",
+                ConnectionState.Reconnecting =>
+                    $"Переподключение: {_activeTransport.DisplayName} · {_activeEndpoint}",
+                // Disconnected при живом _activeTransport — короткие переходные
+                // моменты: сразу после нажатия "Подключить" (транспорт ещё не
+                // отчитался) или между разрывом и началом переподключения.
+                _ => $"Подключение: {_activeTransport.DisplayName} · {_activeEndpoint}",
+            };
 
     private bool CanConnect() =>
         SelectedEndpoint != null && ConnectionStatus == ConnectionState.Disconnected;
@@ -169,17 +199,21 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         _activeTransport?.Close();
 
         _activeTransport = SelectedTransport;
+        _activeEndpoint = SelectedEndpoint;
         _activeTransport.Open(SelectedEndpoint);
+        OnPropertyChanged(nameof(StatusText));
     }
 
     private void Disconnect()
     {
         _activeTransport?.Close();
         _activeTransport = null;
+        _activeEndpoint = null;
 
         // Close() по команде пользователя — штатная остановка, а не разрыв,
         // транспорт сам ConnectionStateChanged не поднимает. Статус выставляем сами.
         ConnectionStatus = ConnectionState.Disconnected;
+        OnPropertyChanged(nameof(StatusText));
     }
 
     private void RefreshEndpoints()
@@ -243,6 +277,32 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                 try
                 {
                     object packet = PacketParser.Parse(frame);
+
+                    // Телеметрия — в БД. Мы в консьюмере, read-поток порта это
+                    // не задевает (ради чего Channel<Frame> и заводился).
+                    // Ошибка записи не должна ни маскироваться под ParseError,
+                    // ни останавливать конвейер — ловим её отдельно.
+                    if (packet is TelemetryPacket telemetry && _telemetryStore != null)
+                    {
+                        try
+                        {
+                            _telemetryStore.Save(
+                                new TelemetryRecord(
+                                    DateTime.Now,
+                                    frame.Sequence,
+                                    telemetry.Temperature,
+                                    telemetry.Humidity
+                                )
+                            );
+                        }
+                        catch (Exception ex)
+                        {
+                            _logFileWriter.WriteLine(
+                                $"Seq={frame.Sequence}  StoreError: {ex.Message}"
+                            );
+                        }
+                    }
+
                     line = packet switch
                     {
                         // CultureInfo.InvariantCulture — иначе на системах с русской локалью

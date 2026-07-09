@@ -5,12 +5,12 @@
 - [x] transport.md
 - [x] framing.md
 - [x] protocol.md
+- [x] storage.md
 - [ ] settings.md
 - [ ] viewmodels.md (MainWindowViewModel, ViewLocator, связь с GUI)
 - [ ] logging.md — телеметрийный лог (LogFileWriter/BoundedLog) vs
       diagnostics-лог (Microsoft.Extensions.Logging/FileLoggerProvider),
       почему их два и почему не Serilog/NLog
-- [ ] storage.md — когда появится сам слой хранения
 - [ ] README.md-индекс по Misc/docs/, когда наберётся достаточно файлов
 
 ## Код — по итогам первого e2e (Misc/diary/2026.07.08.md)
@@ -34,6 +34,11 @@
       по кнопке; `IPortLister`/`SerialPortLister` упразднены —
       перечисление точек подключения теперь обязанность самого транспорта
       (`GetAvailableEndpoints`)
+- [x] слой хранения: SQLite (`ITelemetryStore`/`SqliteTelemetryStore`,
+      Microsoft.Data.Sqlite 10.0.0 — версия проставлена без NuGet,
+      проверить при restore); телеметрия пишется из ProcessFramesAsync
+- [ ] `LogFileWriter` (`runway.log`) теперь дублирует телеметрию из БД —
+      решить, когда БД станет основным хранилищем, не пора ли его убрать
 - [ ] `PacketParser.Parse` — уйти от `object` к типизированной иерархии
       (`abstract record Packet` + подтипы), когда появится `Command`
 

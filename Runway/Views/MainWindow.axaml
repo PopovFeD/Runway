@@ -26,11 +26,13 @@
                       ItemsSource="{Binding AvailableEndpoints}"
                       SelectedItem="{Binding SelectedEndpoint}"/>
 
-            <Button Content="Обновить" Command="{Binding RefreshEndpointsCommand}"/>
+            <Button Content="Обновить список" Command="{Binding RefreshEndpointsCommand}"/>
             <Button Content="Подключить" Command="{Binding ConnectCommand}"/>
             <Button Content="Отключить" Command="{Binding DisconnectCommand}"/>
 
-            <TextBlock Text="{Binding ConnectionStatus}" VerticalAlignment="Center"/>
+            <!-- Показывает реальное соединение (транспорт + точка), а не текущий
+                 выбор в ComboBox — их легко рассинхронизировать, просто листая список -->
+            <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center"/>
         </StackPanel>
 
         <ListBox ItemsSource="{Binding LogEntries}"/>
