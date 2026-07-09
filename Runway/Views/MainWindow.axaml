@@ -5,37 +5,161 @@
         x:Class="Runway.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/avalonia-logo.ico"
-        Title="Runway">
+        Title="Runway"
+        MinWidth="760" MinHeight="480">
 
-    <DockPanel Margin="8">
-        <!-- Панель подключения: транспорт → точка подключения → кнопки.
-        Доступность кнопок управляется CanExecute команд во ViewModel,
-        в разметке никакой логики нет. -->
-        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
-            <ComboBox MinWidth="140"
-                      ItemsSource="{Binding Transports}"
-                      SelectedItem="{Binding SelectedTransport}">
-                <ComboBox.ItemTemplate>
-                    <DataTemplate x:DataType="tr:ITransport">
-                        <TextBlock Text="{Binding DisplayName}"/>
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
+    <!-- Каркас по GUI-макету (Misc/gui_mockups/): постоянные верхняя панель,
+         сайдбар навигации и нижняя статус-панель; контент — вкладками.
+         Функционал только существующий: подключение + живой вывод (LogEntries).
+         Команды/Экспорт/Настройки — заглушки до разделения ViewModel. -->
 
-            <ComboBox MinWidth="140"
-                      ItemsSource="{Binding AvailableEndpoints}"
-                      SelectedItem="{Binding SelectedEndpoint}"/>
+    <Window.Styles>
+        <!-- Полупрозрачные фоны/рамки — одинаково приличны в светлой и тёмной теме -->
+        <Style Selector="Border.bar">
+            <Setter Property="Background" Value="#20808080"/>
+            <Setter Property="Padding" Value="12,6"/>
+        </Style>
+        <Style Selector="Border.tile">
+            <Setter Property="BorderBrush" Value="#60808080"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="12,8"/>
+        </Style>
+        <Style Selector="TextBlock.tileTitle">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Opacity" Value="0.7"/>
+        </Style>
+        <Style Selector="TextBlock.tileValue">
+            <Setter Property="FontSize" Value="22"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,4,0,0"/>
+        </Style>
+        <Style Selector="TabItem">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="MinHeight" Value="36"/>
+        </Style>
+        <Style Selector="TextBlock.stub">
+            <Setter Property="Opacity" Value="0.6"/>
+            <Setter Property="Margin" Value="16"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </Window.Styles>
 
-            <Button Content="Обновить список" Command="{Binding RefreshEndpointsCommand}"/>
-            <Button Content="Подключить" Command="{Binding ConnectCommand}"/>
-            <Button Content="Отключить" Command="{Binding DisconnectCommand}"/>
+    <DockPanel>
 
-            <!-- Показывает реальное соединение (транспорт + точка), а не текущий
-            выбор в ComboBox — их легко рассинхронизировать, просто листая список -->
-            <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center"/>
-        </StackPanel>
+        <!-- ВЕРХНЯЯ ПАНЕЛЬ: имя приложения + индикатор реального соединения -->
+        <Border DockPanel.Dock="Top" Classes="bar">
+            <DockPanel>
+                <TextBlock Text="Runway" FontWeight="Bold" VerticalAlignment="Center"/>
+                <TextBlock DockPanel.Dock="Right"
+                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                           Text="{Binding StatusText}"/>
+            </DockPanel>
+        </Border>
 
-        <ListBox ItemsSource="{Binding LogEntries}"/>
+        <!-- НИЖНЯЯ СТАТУС-ПАНЕЛЬ -->
+        <Border DockPanel.Dock="Bottom" Classes="bar" Padding="12,4">
+            <DockPanel>
+                <TextBlock FontSize="12" Text="{Binding StatusText}"/>
+                <TextBlock DockPanel.Dock="Right" FontSize="12"
+                           HorizontalAlignment="Right"
+                           Text="{Binding LogEntries.Count, StringFormat='Записей в выводе: {0}'}"/>
+            </DockPanel>
+        </Border>
+
+        <!-- САЙДБАР (вкладки слева) + ОСНОВНОЕ ОКНО -->
+        <TabControl TabStripPlacement="Left" Padding="12,8">
+
+            <TabItem Header="Дашборд">
+                <DockPanel>
+                    <!-- Плитки-заглушки: последние значения появятся, когда
+                         ViewModel начнёт их отдавать (разделение по вкладкам) -->
+                    <UniformGrid DockPanel.Dock="Top" Columns="4" Margin="0,0,0,10">
+                        <Border Classes="tile" Margin="0,0,8,0">
+                            <StackPanel>
+                                <TextBlock Classes="tileTitle" Text="Температура"/>
+                                <TextBlock Classes="tileValue" Text="—"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Classes="tile" Margin="0,0,8,0">
+                            <StackPanel>
+                                <TextBlock Classes="tileTitle" Text="Влажность"/>
+                                <TextBlock Classes="tileValue" Text="—"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Classes="tile" Margin="0,0,8,0">
+                            <StackPanel>
+                                <TextBlock Classes="tileTitle" Text="Давление"/>
+                                <TextBlock Classes="tileValue" Text="—"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Classes="tile">
+                            <StackPanel>
+                                <TextBlock Classes="tileTitle" Text="Освещённость"/>
+                                <TextBlock Classes="tileValue" Text="—"/>
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
+
+                    <TextBlock DockPanel.Dock="Top" Classes="tileTitle"
+                               Text="Живой вывод · последние записи" Margin="0,0,0,4"/>
+
+                    <!-- Тот же логгер, что и раньше: BoundedLog поверх LogEntries -->
+                    <ListBox ItemsSource="{Binding LogEntries}"
+                             FontFamily="Cascadia Mono,Consolas,monospace" FontSize="12"/>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Подключение">
+                <StackPanel Spacing="10" Margin="4">
+                    <TextBlock Text="Транспорт" Classes="tileTitle"/>
+                    <ComboBox MinWidth="220"
+                              ItemsSource="{Binding Transports}"
+                              SelectedItem="{Binding SelectedTransport}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="tr:ITransport">
+                                <TextBlock Text="{Binding DisplayName}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <TextBlock Text="Точка подключения" Classes="tileTitle"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <ComboBox MinWidth="220"
+                                  ItemsSource="{Binding AvailableEndpoints}"
+                                  SelectedItem="{Binding SelectedEndpoint}"/>
+                        <Button Content="Обновить список" Command="{Binding RefreshEndpointsCommand}"/>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
+                        <Button Content="Подключить" Command="{Binding ConnectCommand}"/>
+                        <Button Content="Отключить" Command="{Binding DisconnectCommand}"/>
+                    </StackPanel>
+
+                    <TextBlock Text="{Binding StatusText}" Margin="0,6,0,0"/>
+                </StackPanel>
+            </TabItem>
+
+            <TabItem Header="Команды">
+                <TextBlock Classes="stub"
+                           Text="Заглушка. Управляющие команды появятся вместе с CommandsViewModel — PacketBuilder уже умеет собирать кадры (Ping/Telemetry/Environment)."/>
+            </TabItem>
+
+            <TabItem Header="Экспорт">
+                <StackPanel Margin="16" Spacing="8">
+                    <Button Content="Экспортировать все записи" IsEnabled="False"/>
+                    <Button Content="Экспортировать эту сессию" IsEnabled="False"/>
+                    <TextBlock Classes="stub" Margin="0"
+                               Text="Заглушка. CSV будет первым (SqliteTelemetryStore.ReadAll уже готов), Excel — позже."/>
+                </StackPanel>
+            </TabItem>
+
+            <TabItem Header="Настройки">
+                <TextBlock Classes="stub"
+                           Text="Заглушка. Здесь будет редактирование settings.json (порт, скорость, пути логов и БД, поведение переподключения) и сброс к значениям по умолчанию."/>
+            </TabItem>
+
+        </TabControl>
     </DockPanel>
 
 </Window>
