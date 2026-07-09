@@ -25,7 +25,7 @@ public class SerialTransportIntegrationTests : IDisposable
 
     private const int BaudRate = 115200;
 
-    private readonly SerialTransport _transport = new();
+    private readonly SerialTransport _transport = new(BaudRate);
     private SerialPort? _emulatorPort;
 
     [Fact]
@@ -55,7 +55,7 @@ public class SerialTransportIntegrationTests : IDisposable
             }
         };
 
-        _transport.Open(PortA, BaudRate);
+        _transport.Open(PortA);
 
         _emulatorPort = new SerialPort(PortB, BaudRate);
         _emulatorPort.Open();
@@ -103,7 +103,7 @@ public class SerialTransportIntegrationTests : IDisposable
             }
         };
 
-        _transport.Open(PortA, BaudRate);
+        _transport.Open(PortA);
 
         _emulatorPort = new SerialPort(PortB, BaudRate);
         _emulatorPort.Open();

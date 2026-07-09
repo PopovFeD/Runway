@@ -4,16 +4,17 @@
 (в текущей стадии — Python-эмулятором). Ничего не знает о кадрах, протоколе или
 формате данных — только сырые `byte[]` в обе стороны.
 
-Файлы: `Runway/Core/Transport/ISerialTransport.cs`, `SerialTransport.cs`,
-`IPortLister.cs`, `SerialPortLister.cs`.
+Файлы: `Runway/Core/Transport/ITransport.cs`, `SerialTransport.cs`,
+`WifiTransport.cs`, `ConnectionState.cs`.
 
 ---
 
 ## Зона ответственности
 
-* открыть/закрыть последовательный порт;
+* открыть/закрыть канал связи (COM-порт сейчас, TCP-сокет для ESP32 — в будущем);
 * сообщить о новых полученных байтах через событие;
-* дать список доступных портов в системе.
+* перечислить доступные точки подключения своего типа (список COM-портов в
+  системе; для WiFi в будущем — обнаруженные устройства).
 
 Explicitly **не** входит в зону ответственности: поиск границ кадра, проверка CRC,
 разбор содержимого. Всё это — уровнем выше, в `Framing` и `Protocol`.
@@ -23,28 +24,42 @@ Explicitly **не** входит в зону ответственности: п�
 ## Публичный API
 
 ```csharp
-public interface ISerialTransport
+public interface ITransport
 {
+    string DisplayName { get; }                     // имя для ComboBox в GUI
     bool IsOpen { get; }
-    void Open(string portName, int baudRate);
+    IReadOnlyList<string> GetAvailableEndpoints();  // "COM6" / "/dev/ttyUSB0" / (будущее) "ip:port"
+    void Open(string endpoint);
     void Close();
     event Action<byte[]>? DataReceived;
-}
-
-public interface IPortLister
-{
-    List<string> GetAvailablePorts();
+    event Action<ConnectionState>? ConnectionStateChanged;
 }
 ```
 
-`SerialTransport` — единственная реализация `ISerialTransport` на данный момент,
-обёртка над `System.IO.Ports.SerialPort`.
+**Endpoint** — строка-адрес конкретной точки подключения в терминах транспорта:
+у Serial это имя порта, у WiFi будет `"192.168.1.42:3333"`. Конфигурация,
+специфичная для типа транспорта (например, baud rate у Serial), в интерфейс
+намеренно не входит — она задаётся в конструкторе реализации из `AppSettings`.
+Пользователь в GUI выбирает *точку подключения*, а не скорость порта.
 
-`SerialPortLister` — обёртка над `SerialPort.GetPortNames()`, кроссплатформенная
-(на Windows вернёт `COM3` и т.п., на Linux — `/dev/ttyUSB0` и т.п.).
+Реализации:
 
-Оба интерфейса существуют в первую очередь ради DI/тестируемости — конкретные
-реализации создаются вручную в `App.axaml.cs`, контейнера DI в проекте нет.
+* `SerialTransport` — рабочая, обёртка над `System.IO.Ports.SerialPort`.
+  Перечисление точек — `SerialPort.GetPortNames()`, кроссплатформенно
+  (на Windows `COM3` и т.п., на Linux — `/dev/ttyUSB0` и т.п.).
+* `WifiTransport` — **заглушка** под будущее подключение к ESP32 по WiFi.
+  `GetAvailableEndpoints()` возвращает пустой список, поэтому из GUI её
+  `Open()` вызвать невозможно (кнопка "Подключить" выключена без выбранной
+  точки); прямой вызов `Open()` бросает `NotSupportedException`. Существует,
+  чтобы ViewModel и GUI уже сейчас работали со списком транспортов.
+
+Ранее существовавшие `ISerialTransport`/`IPortLister`/`SerialPortLister`
+упразднены: перечисление точек подключения — естественная обязанность самого
+транспорта (у каждого типа канала свой способ), отдельный "листер" был бы
+лишней сущностью при появлении второго транспорта.
+
+Конкретные реализации создаются вручную в `App.axaml.cs` (список
+`ITransport[]`), контейнера DI в проекте нет.
 
 ---
 
@@ -75,7 +90,9 @@ catch (Exception) { break; } // порт закрылся/сломался — �
 в интерфейсе.
 
 На сегодня это компенсируется тем, что `MainWindowViewModel.OnDataReceived`
-оборачивает разбор пакета в свой `try/catch` (см. `Runway/ViewModels/MainWindowViewModel.cs`).
+делает минимум (только `FrameReader.Append` — операции в памяти) и сразу
+передаёт кадры через `Channel<Frame>` в отдельную задачу `ProcessFramesAsync`,
+где разбор пакета обёрнут в `try/catch` (см. `Runway/ViewModels/MainWindowViewModel.cs`).
 Но это ответственность подписчика, а не гарантия самого `SerialTransport` —
 любой новый обработчик `DataReceived` обязан помнить про это правило сам.
 
@@ -83,14 +100,15 @@ catch (Exception) { break; } // порт закрылся/сломался — �
 
 ## Конфигурация
 
-Имя порта и скорость берутся не отсюда, а из `Settings.AppSettings`
-(`PortName`, `BaudRate`, значения по умолчанию `"COM6"` / `115200`), которые
-грузятся через `SettingsLoader` в `App.axaml.cs` при старте и передаются в
-`transport.Open(...)`. Сам `Transport`-слой про `settings.json` ничего не знает.
+Скорость порта (`BaudRate`) берётся из `Settings.AppSettings` и передаётся в
+конструктор `SerialTransport` в `App.axaml.cs`. Сам `Transport`-слой про
+`settings.json` ничего не знает.
 
-`MainWindowViewModel.AvailablePorts` уже вызывает `IPortLister.GetAvailablePorts()`,
-но на момент написания этого документа никак не забинджен в GUI — выбор порта
-из списка пока не реализован, порт жёстко фиксируется настройками при старте.
+Автоподключения при старте больше нет: пользователь выбирает транспорт и точку
+подключения в GUI (два `ComboBox` + кнопки Подключить/Отключить/Обновить в
+`MainWindow.axaml`, команды — в `MainWindowViewModel`). `AppSettings.PortName`
+теперь означает лишь *предвыбранный* порт в списке при старте (если он
+присутствует в системе), а не порт, к которому приложение подключается само.
 
 ---
 

@@ -27,8 +27,13 @@
       `SerialTransport.RunLoop` переоткрывает порт с паузой
       (`ReconnectDelaySeconds`), `ConnectionStateChanged` прокинуто
       в `MainWindowViewModel.ConnectionStatus` и забиндено в GUI
-- [ ] забиндить `AvailablePorts` в `MainWindow.axaml` вместо жёсткого
-      порта из `settings.json`
+- [x] забиндить выбор порта в `MainWindow.axaml` вместо жёсткого
+      порта из `settings.json` — сделано шире исходной задачи: введён
+      общий `ITransport` (Serial — рабочий, `WifiTransport` для ESP32 —
+      заглушка), выбор транспорта и точки подключения в GUI, подключение
+      по кнопке; `IPortLister`/`SerialPortLister` упразднены —
+      перечисление точек подключения теперь обязанность самого транспорта
+      (`GetAvailableEndpoints`)
 - [ ] `PacketParser.Parse` — уйти от `object` к типизированной иерархии
       (`abstract record Packet` + подтипы), когда появится `Command`
 

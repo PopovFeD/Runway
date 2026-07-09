@@ -53,28 +53,36 @@ public partial class App : Application
             });
 
             var frameReader = new FrameReader();
-            var transport = new SerialTransport(
-                loggerFactory.CreateLogger<SerialTransport>(),
-                TimeSpan.FromSeconds(settings.ReconnectDelaySeconds)
-            );
-            var portLister = new SerialPortLister();
             var uiDispatcher = new AvaloniaUiDispatcher();
 
-            // Конструктор ViewModel уже подписывается на transport.DataReceived
-            // и transport.ConnectionStateChanged
+            // Все способы подключения, которые знает приложение. Первый в списке —
+            // предвыбранный в GUI. WifiTransport пока заглушка (см. его комментарий),
+            // но список уже сейчас приучает остальной код не считать Serial
+            // единственным вариантом.
+            var transports = new ITransport[]
+            {
+                new SerialTransport(
+                    settings.BaudRate,
+                    loggerFactory.CreateLogger<SerialTransport>(),
+                    TimeSpan.FromSeconds(settings.ReconnectDelaySeconds)
+                ),
+                new WifiTransport(loggerFactory.CreateLogger<WifiTransport>()),
+            };
+
+            // Конструктор ViewModel уже подписывается на события всех транспортов.
+            // Автоподключения при старте больше нет — порт выбирается в GUI,
+            // PortName из настроек лишь предвыбирается в списке, если он есть.
             var mainViewModel = new MainWindowViewModel(
                 frameReader,
-                transport,
-                portLister,
+                transports,
                 logFileWriter,
                 uiDispatcher,
-                settings.MaxLogEntries
+                settings.MaxLogEntries,
+                initialEndpoint: settings.PortName
             );
 
-            transport.Open(settings.PortName, settings.BaudRate);
-
             // Порядок важен: сначала останавливаем консьюмера очереди кадров
-            // (см. MainWindowViewModel.Dispose), потом транспорт (иначе он может
+            // (см. MainWindowViewModel.Dispose), потом транспорты (иначе они могут
             // успеть дёрнуть уже отписанный OnDataReceived), и только в конце —
             // закрываем файлы логов, чтобы в них не полетела запись в уже
             // закрытый StreamWriter. loggerFactory.Dispose() сам закроет
@@ -83,7 +91,10 @@ public partial class App : Application
             desktop.Exit += (_, _) =>
             {
                 mainViewModel.Dispose();
-                transport.Close();
+                foreach (var transport in transports)
+                {
+                    transport.Close();
+                }
                 logFileWriter.Dispose();
                 loggerFactory.Dispose();
             };

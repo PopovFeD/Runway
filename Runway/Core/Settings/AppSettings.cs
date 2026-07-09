@@ -2,7 +2,11 @@ namespace Runway.Settings;
 
 public class AppSettings
 {
+    // Порт, который будет предвыбран в списке в GUI при старте (если он есть
+    // в системе). Автоподключения по нему больше нет — подключение только по
+    // кнопке "Подключить" (см. MainWindowViewModel.ConnectCommand).
     public string PortName { get; set; } = "COM6";
+
     public int BaudRate { get; set; } = 115200;
 
     // Путь к файлу полного лога (относительно каталога сборки — см. AvaloniaUiDispatcher

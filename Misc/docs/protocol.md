@@ -70,7 +70,8 @@ hum, обе — сотые доли единицы, т.е. `24.53°C` перед
 `NotSupportedException`. **Оба исключения обязаны быть пойманы вызывающим
 кодом** — `PacketParser` сам их не глотает (см. готчу в `transport.md` про
 `SerialTransport.ReadLoop`, которая обрывает read-поток на необработанном
-исключении; текущая защита — `try/catch` в `MainWindowViewModel.OnDataReceived`).
+исключении; текущая защита — `try/catch` в `MainWindowViewModel.ProcessFramesAsync`,
+куда разбор пакетов переехал из `OnDataReceived` вместе с `Channel<Frame>`).
 
 ## `PacketBuilder`
 
@@ -113,5 +114,5 @@ little-endian вручную (`byte & 0xFF`, `byte >> 8`), без `BitConverter`
 
 * **Framing** — источник `Frame` (`PacketParser.Parse(frame)`), также источник
   `Crc16.Compute` для проверки кадра.
-* **ViewModels** — потребитель разобранных пакетов (`MainWindowViewModel.OnDataReceived`
+* **ViewModels** — потребитель разобранных пакетов (`MainWindowViewModel.ProcessFramesAsync`
   вызывает `PacketParser.Parse` и матчит результат через `switch`-выражение).
