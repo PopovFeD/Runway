@@ -28,7 +28,10 @@ public class LogFileWriter : ILogFileWriter
         // CultureInfo.InvariantCulture — иначе ":" в формате даты/времени заменяется
         // на TimeSeparator текущей локали (не везде это ":"), и лог с одной машины
         // может визуально не совпадать по формату с логом на другой.
-        string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
+        string timestamp = DateTime.Now.ToString(
+            "yyyy-MM-dd HH:mm:ss.fff",
+            CultureInfo.InvariantCulture
+        );
         _writer.WriteLine($"{timestamp}  {line}");
     }
 

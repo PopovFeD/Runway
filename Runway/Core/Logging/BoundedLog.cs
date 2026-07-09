@@ -17,10 +17,7 @@ public class BoundedLog
     {
         if (capacity <= 0)
         {
-            throw new ArgumentOutOfRangeException(
-                nameof(capacity),
-                "Capacity must be positive."
-            );
+            throw new ArgumentOutOfRangeException(nameof(capacity), "Capacity must be positive.");
         }
 
         _entries = entries;
