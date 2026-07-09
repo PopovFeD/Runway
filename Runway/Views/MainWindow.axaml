@@ -38,6 +38,16 @@
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="MinHeight" Value="36"/>
         </Style>
+        <Style Selector="ListBox.terminal">
+            <Setter Property="Background" Value="#1E1E1E"/>
+            <Setter Property="Foreground" Value="#D4D4D4"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="4"/>
+        </Style>
+        <Style Selector="ListBox.terminal ListBoxItem">
+            <Setter Property="Padding" Value="8,1"/>
+            <Setter Property="MinHeight" Value="0"/>
+        </Style>
         <Style Selector="TextBlock.stub">
             <Setter Property="Opacity" Value="0.6"/>
             <Setter Property="Margin" Value="16"/>
@@ -47,13 +57,14 @@
 
     <DockPanel>
 
-        <!-- ВЕРХНЯЯ ПАНЕЛЬ: имя приложения + индикатор реального соединения -->
+        <!-- ВЕРХНЯЯ ПАНЕЛЬ: индикатор реального соединения + кнопка вкл/выкл.
+             Имени приложения тут нет — оно и так в заголовке окна. -->
         <Border DockPanel.Dock="Top" Classes="bar">
             <DockPanel>
-                <TextBlock Text="Runway" FontWeight="Bold" VerticalAlignment="Center"/>
-                <TextBlock DockPanel.Dock="Right"
-                           HorizontalAlignment="Right" VerticalAlignment="Center"
-                           Text="{Binding StatusText}"/>
+                <Button DockPanel.Dock="Right"
+                        Content="{Binding ToggleConnectionText}"
+                        Command="{Binding ToggleConnectionCommand}"/>
+                <TextBlock VerticalAlignment="Center" Text="{Binding StatusText}"/>
             </DockPanel>
         </Border>
 
@@ -72,31 +83,30 @@
 
             <TabItem Header="Дашборд">
                 <DockPanel>
-                    <!-- Плитки-заглушки: последние значения появятся, когда
-                         ViewModel начнёт их отдавать (разделение по вкладкам) -->
+                    <!-- Последние принятые значения по каждому типу пакета -->
                     <UniformGrid DockPanel.Dock="Top" Columns="4" Margin="0,0,0,10">
                         <Border Classes="tile" Margin="0,0,8,0">
                             <StackPanel>
                                 <TextBlock Classes="tileTitle" Text="Температура"/>
-                                <TextBlock Classes="tileValue" Text="—"/>
+                                <TextBlock Classes="tileValue" Text="{Binding LastTemperatureText}"/>
                             </StackPanel>
                         </Border>
                         <Border Classes="tile" Margin="0,0,8,0">
                             <StackPanel>
                                 <TextBlock Classes="tileTitle" Text="Влажность"/>
-                                <TextBlock Classes="tileValue" Text="—"/>
+                                <TextBlock Classes="tileValue" Text="{Binding LastHumidityText}"/>
                             </StackPanel>
                         </Border>
                         <Border Classes="tile" Margin="0,0,8,0">
                             <StackPanel>
                                 <TextBlock Classes="tileTitle" Text="Давление"/>
-                                <TextBlock Classes="tileValue" Text="—"/>
+                                <TextBlock Classes="tileValue" Text="{Binding LastPressureText}"/>
                             </StackPanel>
                         </Border>
                         <Border Classes="tile">
                             <StackPanel>
                                 <TextBlock Classes="tileTitle" Text="Освещённость"/>
-                                <TextBlock Classes="tileValue" Text="—"/>
+                                <TextBlock Classes="tileValue" Text="{Binding LastLightText}"/>
                             </StackPanel>
                         </Border>
                     </UniformGrid>
@@ -104,8 +114,10 @@
                     <TextBlock DockPanel.Dock="Top" Classes="tileTitle"
                                Text="Живой вывод · последние записи" Margin="0,0,0,4"/>
 
-                    <!-- Тот же логгер, что и раньше: BoundedLog поверх LogEntries -->
-                    <ListBox ItemsSource="{Binding LogEntries}"
+                    <!-- Живой вывод в терминальном стиле (см. мокап): тёмный фон,
+                         плотные строки, автопрокрутка вниз — код в MainWindow.axaml.cs -->
+                    <ListBox x:Name="LiveOutput" Classes="terminal"
+                             ItemsSource="{Binding LogEntries}"
                              FontFamily="Cascadia Mono,Consolas,monospace" FontSize="12"/>
                 </DockPanel>
             </TabItem>

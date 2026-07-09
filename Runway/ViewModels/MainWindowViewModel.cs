@@ -95,6 +95,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         ConnectCommand = new RelayCommand(Connect, CanConnect);
         DisconnectCommand = new RelayCommand(Disconnect, CanDisconnect);
         RefreshLogsCommand = new RelayCommand(RefreshLogs);
+        ToggleConnectionCommand = new RelayCommand(ToggleConnection, CanToggleConnection);
 
         RefreshEndpoints();
 
@@ -124,6 +125,57 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     public RelayCommand ConnectCommand { get; }
     public RelayCommand DisconnectCommand { get; }
     public RelayCommand RefreshLogsCommand { get; }
+    public RelayCommand ToggleConnectionCommand { get; }
+
+    // Единая кнопка вкл/выкл в верхней панели (пункт из TODO). Решение
+    // принимается по ФАКТУ подключения (_activeTransport), а не по выбору
+    // в ComboBox — как и StatusText.
+    public string ToggleConnectionText => _activeTransport == null ? "Подключить" : "Отключить";
+
+    private bool CanToggleConnection() =>
+        _activeTransport != null || (SelectedEndpoint != null);
+
+    private void ToggleConnection()
+    {
+        if (_activeTransport == null)
+        {
+            Connect();
+        }
+        else
+        {
+            Disconnect();
+        }
+    }
+
+    // --- Последние значения для плиток Дашборда ---
+
+    private string _lastTemperatureText = "—";
+    public string LastTemperatureText
+    {
+        get => _lastTemperatureText;
+        private set => SetProperty(ref _lastTemperatureText, value);
+    }
+
+    private string _lastHumidityText = "—";
+    public string LastHumidityText
+    {
+        get => _lastHumidityText;
+        private set => SetProperty(ref _lastHumidityText, value);
+    }
+
+    private string _lastPressureText = "—";
+    public string LastPressureText
+    {
+        get => _lastPressureText;
+        private set => SetProperty(ref _lastPressureText, value);
+    }
+
+    private string _lastLightText = "—";
+    public string LastLightText
+    {
+        get => _lastLightText;
+        private set => SetProperty(ref _lastLightText, value);
+    }
 
     // --- Вкладка "Логи": фильтруемое чтение событий из БД ---
 
@@ -220,6 +272,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             if (SetProperty(ref _selectedEndpoint, value))
             {
                 ConnectCommand.NotifyCanExecuteChanged();
+                ToggleConnectionCommand.NotifyCanExecuteChanged();
             }
         }
     }
@@ -236,7 +289,9 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                 // Доступность кнопок зависит от статуса — пересчитываем при каждой смене
                 ConnectCommand.NotifyCanExecuteChanged();
                 DisconnectCommand.NotifyCanExecuteChanged();
+                ToggleConnectionCommand.NotifyCanExecuteChanged();
                 OnPropertyChanged(nameof(StatusText));
+                OnPropertyChanged(nameof(ToggleConnectionText));
             }
         }
     }
@@ -303,6 +358,8 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
         _activeTransport.Open(SelectedEndpoint);
         OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(ToggleConnectionText));
+        ToggleConnectionCommand.NotifyCanExecuteChanged();
     }
 
     private void Disconnect()
@@ -331,6 +388,8 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         // транспорт сам ConnectionStateChanged не поднимает. Статус выставляем сами.
         ConnectionStatus = ConnectionState.Disconnected;
         OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(ToggleConnectionText));
+        ToggleConnectionCommand.NotifyCanExecuteChanged();
     }
 
     private void RefreshEndpoints()
@@ -397,9 +456,10 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             await foreach (var frame in _frameChannel.Reader.ReadAllAsync(cancellationToken))
             {
                 string line;
+                Packet? packet = null;
                 try
                 {
-                    Packet packet = PacketParser.Parse(frame);
+                    packet = PacketParser.Parse(frame);
 
                     // Телеметрия — в БД. Мы в консьюмере, read-поток порта это
                     // не задевает (ради чего Channel<Frame> и заводился).
@@ -462,11 +522,46 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
                 // Полный лог — на диск, без ограничений по размеру. Мы уже не в
                 // read-потоке порта, так что запись на диск ему не мешает.
+                // (LogFileWriter добавляет свой таймстамп сам — строку не дублируем.)
                 _logFileWriter.WriteLine(line);
 
-                // В GUI — с ограничением через BoundedLog, чтобы не тормозить ListBox
+                // В GUI — строка в лог-стиле (время, как в терминале VS Code),
+                // с ограничением через BoundedLog, чтобы не тормозить ListBox
                 // и не есть память сколь угодно долго работающей сессии.
-                _uiDispatcher.Post(() => _boundedLog.Add(line));
+                string guiLine = string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{DateTime.Now:HH:mm:ss.fff}  {line}"
+                );
+                Packet? uiPacket = packet;
+                _uiDispatcher.Post(() =>
+                {
+                    _boundedLog.Add(guiLine);
+
+                    // Плитки Дашборда: последние значения по типу пакета
+                    switch (uiPacket)
+                    {
+                        case TelemetryPacket t:
+                            LastTemperatureText = string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"{t.Temperature:F2} °C"
+                            );
+                            LastHumidityText = string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"{t.Humidity:F2} %"
+                            );
+                            break;
+                        case EnvironmentPacket e:
+                            LastPressureText = string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"{e.PressureHpa:F2} hPa"
+                            );
+                            LastLightText = string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"{e.LightLux:F2} lx"
+                            );
+                            break;
+                    }
+                });
             }
         }
         catch (OperationCanceledException)

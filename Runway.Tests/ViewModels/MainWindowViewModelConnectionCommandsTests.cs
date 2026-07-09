@@ -177,6 +177,37 @@ public class MainWindowViewModelConnectionCommandsTests
         vm.Dispose();
     }
 
+    [Fact]
+    public void ToggleConnection_ConnectsThenDisconnects_ByActualState()
+    {
+        var transport = new FakeTransport("COM3");
+        var vm = CreateViewModel(new[] { transport });
+
+        Assert.Equal("Подключить", vm.ToggleConnectionText);
+
+        vm.ToggleConnectionCommand.Execute(null);
+        Assert.True(transport.IsOpen);
+        Assert.Equal("Отключить", vm.ToggleConnectionText);
+
+        vm.ToggleConnectionCommand.Execute(null);
+        Assert.False(transport.IsOpen);
+        Assert.Equal("Подключить", vm.ToggleConnectionText);
+        Assert.Equal(ConnectionState.Disconnected, vm.ConnectionStatus);
+
+        vm.Dispose();
+    }
+
+    [Fact]
+    public void ToggleConnection_IsDisabled_WithoutEndpoint()
+    {
+        var transport = new FakeTransport();
+        var vm = CreateViewModel(new[] { transport });
+
+        Assert.False(vm.ToggleConnectionCommand.CanExecute(null));
+
+        vm.Dispose();
+    }
+
     private static MainWindowViewModel CreateViewModel(
         FakeTransport[] transports,
         string? initialEndpoint = null

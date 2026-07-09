@@ -127,6 +127,36 @@ public class MainWindowViewModelTelemetryStoreTests
         vm.Dispose();
     }
 
+    [Fact]
+    public async Task DashboardTiles_ShowLastValues_PerPacketType()
+    {
+        var transport = new FakeTransport();
+        var store = new FakeAppStore();
+        var vm = CreateViewModel(transport, store);
+
+        Assert.Equal("—", vm.LastTemperatureText);
+
+        transport.RaiseDataReceived(
+            FrameTestHelper.BuildFrameBytes(1, (byte)MessageType.Telemetry, 1, TelemetryPayload)
+        );
+        var envFrame = PacketBuilder.CreateEnvironment(1, 2, 1013.25, 347.5);
+        transport.RaiseDataReceived(
+            FrameTestHelper.BuildFrameBytes(1, (byte)MessageType.Environment, 2, envFrame.Payload)
+        );
+
+        await WaitUntilAsync(() => vm.LastLightText != "—", TimeSpan.FromSeconds(2));
+
+        Assert.Equal("24.53 °C", vm.LastTemperatureText);
+        Assert.Equal("51.28 %", vm.LastHumidityText);
+        Assert.Equal("1013.25 hPa", vm.LastPressureText);
+        Assert.Equal("347.50 lx", vm.LastLightText);
+
+        // Строка живого вывода — в лог-стиле, с меткой времени HH:mm:ss.fff
+        Assert.All(vm.LogEntries, l => Assert.Matches(@"^\d{2}:\d{2}:\d{2}\.\d{3}  ", l));
+
+        vm.Dispose();
+    }
+
     private static MainWindowViewModel CreateViewModel(FakeTransport transport, FakeAppStore store)
     {
         return new MainWindowViewModel(
