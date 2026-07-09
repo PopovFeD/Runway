@@ -33,6 +33,10 @@ public partial class App : Application
 
             transport.Open(settings.PortName, settings.BaudRate);
 
+            // Останавливаем консьюмера очереди кадров (см. MainWindowViewModel.Dispose),
+            // чтобы фоновая задача разбора не осталась висеть после закрытия окна.
+            desktop.Exit += (_, _) => mainViewModel.Dispose();
+
             desktop.MainWindow = new MainWindow { DataContext = mainViewModel };
         }
 
