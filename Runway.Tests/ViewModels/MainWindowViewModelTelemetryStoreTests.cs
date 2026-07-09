@@ -7,7 +7,7 @@ using Xunit;
 
 namespace Runway.Tests.ViewModels;
 
-// Тесты на запись телеметрии в ITelemetryStore из консьюмера очереди кадров.
+// Тесты на запись телеметрии/событий/сессий в IAppStore из ViewModel.
 public class MainWindowViewModelTelemetryStoreTests
 {
     // Payload как в PacketParserTests: T=24.53°C, H=51.28%
@@ -17,7 +17,7 @@ public class MainWindowViewModelTelemetryStoreTests
     public async Task TelemetryFrame_IsSavedToStore_WithParsedValues()
     {
         var transport = new FakeTransport();
-        var store = new FakeTelemetryStore();
+        var store = new FakeAppStore();
         var vm = CreateViewModel(transport, store);
 
         transport.RaiseDataReceived(
@@ -38,7 +38,7 @@ public class MainWindowViewModelTelemetryStoreTests
     public async Task NonTelemetryFrame_IsNotSavedToStore()
     {
         var transport = new FakeTransport();
-        var store = new FakeTelemetryStore();
+        var store = new FakeAppStore();
         var vm = CreateViewModel(transport, store);
 
         transport.RaiseDataReceived(
@@ -58,7 +58,7 @@ public class MainWindowViewModelTelemetryStoreTests
     public async Task StoreFailure_IsLogged_ButPipelineKeepsProcessing()
     {
         var transport = new FakeTransport();
-        var store = new FakeTelemetryStore
+        var store = new FakeAppStore
         {
             ThrowOnSave = new InvalidOperationException("db is broken"),
         };
@@ -79,10 +79,55 @@ public class MainWindowViewModelTelemetryStoreTests
         vm.Dispose();
     }
 
-    private static MainWindowViewModel CreateViewModel(
-        FakeTransport transport,
-        FakeTelemetryStore store
-    )
+    [Fact]
+    public async Task Connect_BeginsSession_AndTelemetryCarriesItsId()
+    {
+        var transport = new FakeTransport("COM3");
+        var store = new FakeAppStore();
+        var vm = CreateViewModel(transport, store);
+
+        vm.ConnectCommand.Execute(null);
+        transport.RaiseDataReceived(
+            FrameTestHelper.BuildFrameBytes(1, (byte)MessageType.Telemetry, 5, TelemetryPayload)
+        );
+        await WaitUntilAsync(() => store.Records.Count > 0, TimeSpan.FromSeconds(2));
+
+        var session = Assert.Single(store.StartedSessions);
+        Assert.Equal("COM3", session.Endpoint);
+        Assert.Equal(session.Id, Assert.Single(store.Records).SessionId);
+
+        vm.DisconnectCommand.Execute(null);
+        Assert.Equal(session.Id, Assert.Single(store.EndedSessions));
+
+        vm.Dispose();
+    }
+
+    [Fact]
+    public void ConnectionEvents_AreSaved_AndFilterableViaRefreshLogs()
+    {
+        var transport = new FakeTransport("COM3");
+        var store = new FakeAppStore();
+        var vm = CreateViewModel(transport, store);
+
+        vm.ConnectCommand.Execute(null);
+        transport.RaiseConnectionStateChanged(Runway.Transport.ConnectionState.Connected);
+        transport.RaiseConnectionStateChanged(Runway.Transport.ConnectionState.Reconnecting);
+
+        // Info "Подключение", Info "Состояние: Connected", Warning "Reconnecting"
+        Assert.Equal(3, store.Events.Count);
+        Assert.All(store.Events, e => Assert.NotNull(e.SessionId));
+
+        vm.SelectedLogLevelFilter = "Warning";
+        vm.RefreshLogsCommand.Execute(null);
+
+        var line = Assert.Single(vm.FilteredLogEvents);
+        Assert.Contains("Reconnecting", line);
+        Assert.Contains("[Warning]", line);
+
+        vm.Dispose();
+    }
+
+    private static MainWindowViewModel CreateViewModel(FakeTransport transport, FakeAppStore store)
     {
         return new MainWindowViewModel(
             new FrameReader(),

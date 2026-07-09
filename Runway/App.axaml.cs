@@ -73,7 +73,7 @@ public partial class App : Application
             // Конструктор ViewModel уже подписывается на события всех транспортов.
             // Автоподключения при старте больше нет — порт выбирается в GUI,
             // PortName из настроек лишь предвыбирается в списке, если он есть.
-            var telemetryStore = new SqliteTelemetryStore(
+            var appStore = new SqliteAppStore(
                 Path.Combine(AppContext.BaseDirectory, settings.DatabaseFilePath)
             );
 
@@ -82,7 +82,7 @@ public partial class App : Application
                 transports,
                 logFileWriter,
                 uiDispatcher,
-                telemetryStore,
+                appStore,
                 settings.MaxLogEntries,
                 initialEndpoint: settings.PortName
             );
@@ -101,7 +101,7 @@ public partial class App : Application
                 {
                     transport.Close();
                 }
-                telemetryStore.Dispose();
+                appStore.Dispose();
                 logFileWriter.Dispose();
                 loggerFactory.Dispose();
             };

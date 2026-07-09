@@ -30,8 +30,13 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     // в ComboBox может уже уехать на другой транспорт/порт, индикатор не должен.
     private string? _activeEndpoint;
 
-    // Хранилище телеметрии; null — работаем без БД (например, в части тестов).
-    private readonly ITelemetryStore? _telemetryStore;
+    // Хранилище данных приложения; null — работаем без БД (например, в части тестов).
+    private readonly IAppStore? _appStore;
+
+    // Текущая сессия подключения (id из IAppStore.BeginSession); 0 — сессии нет.
+    // Пишется из UI-потока (Connect/Disconnect), читается из консьюмера кадров —
+    // поэтому доступ через Volatile.Read/Write, а не голое поле.
+    private long _currentSessionId;
 
     // Очередь между read-потоком порта (продюсер) и разбором пакетов (консьюмер).
     // Смысл: OnDataReceived вызывается прямо из фонового потока SerialTransport.ReadLoop,
@@ -56,7 +61,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         IReadOnlyList<ITransport> transports,
         ILogFileWriter logFileWriter,
         IUiDispatcher uiDispatcher,
-        ITelemetryStore? telemetryStore = null,
+        IAppStore? appStore = null,
         int maxLogEntries = 500,
         string? initialEndpoint = null
     )
@@ -70,7 +75,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         Transports = transports;
         _logFileWriter = logFileWriter;
         _uiDispatcher = uiDispatcher;
-        _telemetryStore = telemetryStore;
+        _appStore = appStore;
         _boundedLog = new BoundedLog(LogEntries, maxLogEntries);
 
         // Напрямую в поле, не через свойство: сеттер SelectedTransport дёргает
@@ -89,6 +94,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         RefreshEndpointsCommand = new RelayCommand(RefreshEndpoints);
         ConnectCommand = new RelayCommand(Connect, CanConnect);
         DisconnectCommand = new RelayCommand(Disconnect, CanDisconnect);
+        RefreshLogsCommand = new RelayCommand(RefreshLogs);
 
         RefreshEndpoints();
 
@@ -117,6 +123,81 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     public RelayCommand RefreshEndpointsCommand { get; }
     public RelayCommand ConnectCommand { get; }
     public RelayCommand DisconnectCommand { get; }
+    public RelayCommand RefreshLogsCommand { get; }
+
+    // --- Вкладка "Логи": фильтруемое чтение событий из БД ---
+
+    public IReadOnlyList<string> LogLevelFilters { get; } =
+        new[] { "Все", "Info", "Warning", "Error" };
+
+    private string _selectedLogLevelFilter = "Все";
+    public string SelectedLogLevelFilter
+    {
+        get => _selectedLogLevelFilter;
+        set => SetProperty(ref _selectedLogLevelFilter, value);
+    }
+
+    private bool _onlyCurrentSession;
+    public bool OnlyCurrentSession
+    {
+        get => _onlyCurrentSession;
+        set => SetProperty(ref _onlyCurrentSession, value);
+    }
+
+    // Результат последнего RefreshLogs — уже отформатированные строки.
+    // Обновление по кнопке, не live: чтение из SQLite на каждый чих не нужно,
+    // а живой поток и так виден на Дашборде.
+    public ObservableCollection<string> FilteredLogEvents { get; } = new();
+
+    private void RefreshLogs()
+    {
+        if (_appStore == null)
+            return;
+
+        string? level = SelectedLogLevelFilter == "Все" ? null : SelectedLogLevelFilter;
+        long session = Volatile.Read(ref _currentSessionId);
+        long? sessionFilter = OnlyCurrentSession && session != 0 ? session : null;
+
+        var events = _appStore.ReadEvents(level, sessionFilter);
+
+        FilteredLogEvents.Clear();
+        foreach (var e in events)
+        {
+            FilteredLogEvents.Add(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{e.Timestamp:HH:mm:ss}  [{e.Level}]  {e.Category}  {e.Message}"
+                )
+            );
+        }
+    }
+
+    // Событие приложения — в БД. Ошибка записи не должна ронять UI-поток
+    // или консьюмер: хранилище может быть недоступно, событие тогда теряется
+    // (его дубль всё равно есть в diagnostics-логе у SerialTransport).
+    private void SaveEventQuietly(string level, string category, string message)
+    {
+        if (_appStore == null)
+            return;
+
+        long session = Volatile.Read(ref _currentSessionId);
+        try
+        {
+            _appStore.SaveEvent(
+                new EventRecord(
+                    DateTime.Now,
+                    level,
+                    category,
+                    message,
+                    session == 0 ? null : session
+                )
+            );
+        }
+        catch
+        {
+            // Некуда репортить — БД и есть место для репортов
+        }
+    }
 
     public ITransport SelectedTransport
     {
@@ -197,6 +278,29 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
         _activeTransport = SelectedTransport;
         _activeEndpoint = SelectedEndpoint;
+
+        // Сессия открывается ДО Open: первые события подключения должны уже
+        // ложиться с session_id. Переподключения внутри разрыва сессию не дробят.
+        if (_appStore != null)
+        {
+            try
+            {
+                Volatile.Write(
+                    ref _currentSessionId,
+                    _appStore.BeginSession(_activeTransport.DisplayName, SelectedEndpoint)
+                );
+            }
+            catch
+            {
+                Volatile.Write(ref _currentSessionId, 0);
+            }
+        }
+        SaveEventQuietly(
+            "Info",
+            "Connection",
+            $"Подключение: {_activeTransport.DisplayName} · {SelectedEndpoint}"
+        );
+
         _activeTransport.Open(SelectedEndpoint);
         OnPropertyChanged(nameof(StatusText));
     }
@@ -206,6 +310,22 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         _activeTransport?.Close();
         _activeTransport = null;
         _activeEndpoint = null;
+
+        SaveEventQuietly("Info", "Connection", "Отключение по команде пользователя");
+
+        long session = Volatile.Read(ref _currentSessionId);
+        if (session != 0 && _appStore != null)
+        {
+            try
+            {
+                _appStore.EndSession(session);
+            }
+            catch
+            {
+                // См. SaveEventQuietly — репортить некуда
+            }
+            Volatile.Write(ref _currentSessionId, 0);
+        }
 
         // Close() по команде пользователя — штатная остановка, а не разрыв,
         // транспорт сам ConnectionStateChanged не поднимает. Статус выставляем сами.
@@ -242,6 +362,12 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             if (_activeTransport != null)
             {
                 ConnectionStatus = state;
+
+                SaveEventQuietly(
+                    state == ConnectionState.Connected ? "Info" : "Warning",
+                    "Connection",
+                    $"Состояние: {state} ({_activeTransport.DisplayName} · {_activeEndpoint})"
+                );
             }
         });
     }
@@ -279,16 +405,18 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                     // не задевает (ради чего Channel<Frame> и заводился).
                     // Ошибка записи не должна ни маскироваться под ParseError,
                     // ни останавливать конвейер — ловим её отдельно.
-                    if (packet is TelemetryPacket telemetry && _telemetryStore != null)
+                    if (packet is TelemetryPacket telemetry && _appStore != null)
                     {
+                        long session = Volatile.Read(ref _currentSessionId);
                         try
                         {
-                            _telemetryStore.Save(
+                            _appStore.SaveTelemetry(
                                 new TelemetryRecord(
                                     DateTime.Now,
                                     frame.Sequence,
                                     telemetry.Temperature,
-                                    telemetry.Humidity
+                                    telemetry.Humidity,
+                                    session == 0 ? null : session
                                 )
                             );
                         }
@@ -325,6 +453,11 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                 {
                     line =
                         $"Seq={frame.Sequence}  Type=0x{frame.MessageType:X2}  ParseError: {ex.Message}";
+                    SaveEventQuietly(
+                        "Warning",
+                        "Parser",
+                        $"Seq={frame.Sequence} Type=0x{frame.MessageType:X2}: {ex.Message}"
+                    );
                 }
 
                 // Полный лог — на диск, без ограничений по размеру. Мы уже не в

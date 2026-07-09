@@ -154,6 +154,24 @@
                 </StackPanel>
             </TabItem>
 
+            <TabItem Header="Логи">
+                <DockPanel>
+                    <!-- Фильтры читают события из SQLite (таблица events) по кнопке;
+                         живой поток без фильтров — на Дашборде -->
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal"
+                                Spacing="8" Margin="0,0,0,8">
+                        <ComboBox MinWidth="110"
+                                  ItemsSource="{Binding LogLevelFilters}"
+                                  SelectedItem="{Binding SelectedLogLevelFilter}"/>
+                        <CheckBox Content="Только текущая сессия"
+                                  IsChecked="{Binding OnlyCurrentSession}"/>
+                        <Button Content="Обновить" Command="{Binding RefreshLogsCommand}"/>
+                    </StackPanel>
+                    <ListBox ItemsSource="{Binding FilteredLogEvents}"
+                             FontFamily="Cascadia Mono,Consolas,monospace" FontSize="12"/>
+                </DockPanel>
+            </TabItem>
+
             <TabItem Header="Настройки">
                 <TextBlock Classes="stub"
                            Text="Заглушка. Здесь будет редактирование settings.json (порт, скорость, пути логов и БД, поведение переподключения) и сброс к значениям по умолчанию."/>
