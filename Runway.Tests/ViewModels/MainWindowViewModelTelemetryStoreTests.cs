@@ -58,7 +58,10 @@ public class MainWindowViewModelTelemetryStoreTests
     public async Task StoreFailure_IsLogged_ButPipelineKeepsProcessing()
     {
         var transport = new FakeTransport();
-        var store = new FakeTelemetryStore { ThrowOnSave = new InvalidOperationException("db is broken") };
+        var store = new FakeTelemetryStore
+        {
+            ThrowOnSave = new InvalidOperationException("db is broken"),
+        };
         var vm = CreateViewModel(transport, store);
 
         transport.RaiseDataReceived(

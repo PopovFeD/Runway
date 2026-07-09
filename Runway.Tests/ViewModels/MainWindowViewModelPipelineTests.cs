@@ -115,7 +115,10 @@ public class MainWindowViewModelPipelineTests
             transport.RaiseDataReceived(frame);
         }
 
-        await WaitUntilAsync(() => logFileWriter.Lines.Count >= frameCount, TimeSpan.FromSeconds(2));
+        await WaitUntilAsync(
+            () => logFileWriter.Lines.Count >= frameCount,
+            TimeSpan.FromSeconds(2)
+        );
 
         Assert.Equal(frameCount, logFileWriter.Lines.Count);
         Assert.True(vm.LogEntries.Count <= 2);

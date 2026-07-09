@@ -63,10 +63,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     {
         if (transports.Count == 0)
         {
-            throw new ArgumentException(
-                "Нужен хотя бы один транспорт.",
-                nameof(transports)
-            );
+            throw new ArgumentException("Нужен хотя бы один транспорт.", nameof(transports));
         }
 
         _frameReader = frameReader;

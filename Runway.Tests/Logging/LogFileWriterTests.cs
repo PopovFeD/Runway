@@ -51,10 +51,7 @@ public class LogFileWriterTests : IDisposable
     [Fact]
     public void Constructor_CreatesDirectory_WhenItDoesNotExistYet()
     {
-        string nestedDir = Path.Combine(
-            Path.GetTempPath(),
-            $"runway-test-dir-{Guid.NewGuid():N}"
-        );
+        string nestedDir = Path.Combine(Path.GetTempPath(), $"runway-test-dir-{Guid.NewGuid():N}");
         string nestedPath = Path.Combine(nestedDir, "runway.log");
 
         try
