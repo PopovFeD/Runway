@@ -4,38 +4,56 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Runway.Transport;
 
-public class SerialTransport : ISerialTransport
+public class SerialTransport : ITransport
 {
     private readonly ILogger<SerialTransport> _logger;
     private readonly TimeSpan _reconnectDelay;
+
+    // Скорость порта — конфигурация транспорта (задаётся один раз из настроек),
+    // а не свойство точки подключения: endpoint в терминах ITransport — это
+    // только имя порта ("COM6"), которое пользователь выбирает в GUI.
+    private readonly int _baudRate;
 
     private SerialPort? _port;
     private Thread? _runThread;
     private volatile bool _keepRunning;
 
     private string _portName = string.Empty;
-    private int _baudRate;
 
-    public SerialTransport(ILogger<SerialTransport>? logger = null, TimeSpan? reconnectDelay = null)
+    public SerialTransport(
+        int baudRate,
+        ILogger<SerialTransport>? logger = null,
+        TimeSpan? reconnectDelay = null
+    )
     {
+        _baudRate = baudRate;
         _logger = logger ?? NullLogger<SerialTransport>.Instance;
         _reconnectDelay = reconnectDelay ?? TimeSpan.FromSeconds(2);
     }
+
+    public string DisplayName => "Serial (COM)";
 
     public bool IsOpen => _port is { IsOpen: true };
 
     public event Action<byte[]>? DataReceived;
     public event Action<ConnectionState>? ConnectionStateChanged;
 
-    public void Open(string portName, int baudRate)
+    public IReadOnlyList<string> GetAvailableEndpoints()
+    {
+        // SerialPort.GetPortNames() сам работает кроссплатформенно:
+        // на Windows вернёт "COM3", "COM6" и т.п.,
+        // на Linux — "/dev/ttyUSB0" и т.п.
+        return SerialPort.GetPortNames();
+    }
+
+    public void Open(string endpoint)
     {
         if (_keepRunning)
         {
             Close();
         }
 
-        _portName = portName;
-        _baudRate = baudRate;
+        _portName = endpoint;
 
         _keepRunning = true;
         _runThread = new Thread(RunLoop) { IsBackground = true };

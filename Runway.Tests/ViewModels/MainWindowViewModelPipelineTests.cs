@@ -20,12 +20,11 @@ public class MainWindowViewModelPipelineTests
     [Fact]
     public async Task DataReceived_ParsesTelemetryFrame_AndAddsLineToLogEntries()
     {
-        var transport = new FakeSerialTransport();
+        var transport = new FakeTransport();
         var logFileWriter = new FakeLogFileWriter();
         var vm = new MainWindowViewModel(
             new FrameReader(),
-            transport,
-            new FakePortLister(),
+            new[] { transport },
             logFileWriter,
             new ImmediateUiDispatcher()
         );
@@ -55,12 +54,11 @@ public class MainWindowViewModelPipelineTests
     [Fact]
     public async Task DataReceived_UnknownMessageType_LogsParseError_ButKeepsProcessingNextFrames()
     {
-        var transport = new FakeSerialTransport();
+        var transport = new FakeTransport();
         var logFileWriter = new FakeLogFileWriter();
         var vm = new MainWindowViewModel(
             new FrameReader(),
-            transport,
-            new FakePortLister(),
+            new[] { transport },
             logFileWriter,
             new ImmediateUiDispatcher()
         );
@@ -92,15 +90,14 @@ public class MainWindowViewModelPipelineTests
     [Fact]
     public async Task ProcessedLines_AreWrittenToLogFile_EvenAfterBeingEvictedFromLogEntries()
     {
-        var transport = new FakeSerialTransport();
+        var transport = new FakeTransport();
         var logFileWriter = new FakeLogFileWriter();
 
         // Намеренно маленькая ёмкость GUI-лога — 2 записи. Проверяем, что в файл
         // (FakeLogFileWriter) уходят ВСЕ строки, а не только последние две.
         var vm = new MainWindowViewModel(
             new FrameReader(),
-            transport,
-            new FakePortLister(),
+            new[] { transport },
             logFileWriter,
             new ImmediateUiDispatcher(),
             maxLogEntries: 2
@@ -129,12 +126,11 @@ public class MainWindowViewModelPipelineTests
     [Fact]
     public void Dispose_UnsubscribesFromTransport_SoLateEventsAreIgnored()
     {
-        var transport = new FakeSerialTransport();
+        var transport = new FakeTransport();
         var logFileWriter = new FakeLogFileWriter();
         var vm = new MainWindowViewModel(
             new FrameReader(),
-            transport,
-            new FakePortLister(),
+            new[] { transport },
             logFileWriter,
             new ImmediateUiDispatcher()
         );

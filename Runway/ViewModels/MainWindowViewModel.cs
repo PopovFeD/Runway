@@ -1,8 +1,9 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using CommunityToolkit.Mvvm.Input;
 using Runway.Framing;
 using Runway.Logging;
 using Runway.Protocol;
@@ -14,11 +15,15 @@ namespace Runway.ViewModels;
 public class MainWindowViewModel : ViewModelBase, IDisposable
 {
     private readonly FrameReader _frameReader;
-    private readonly ISerialTransport _transport;
-    private readonly IPortLister _portLister;
     private readonly ILogFileWriter _logFileWriter;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly BoundedLog _boundedLog;
+
+    // Транспорт, которому реально сказали Open() — только его и нужно закрывать.
+    // Не то же самое, что SelectedTransport: пользователь может выбрать в списке
+    // другой транспорт, пока активный ещё подключён (Connect до этого не дойдёт —
+    // кнопка выключена, — но выбор в ComboBox уже поменяется).
+    private ITransport? _activeTransport;
 
     // Очередь между read-потоком порта (продюсер) и разбором пакетов (консьюмер).
     // Смысл: OnDataReceived вызывается прямо из фонового потока SerialTransport.ReadLoop,
@@ -35,50 +40,182 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly Task _processingTask;
 
     private ConnectionState _connectionStatus = ConnectionState.Disconnected;
+    private ITransport _selectedTransport;
+    private string? _selectedEndpoint;
 
     public MainWindowViewModel(
         FrameReader frameReader,
-        ISerialTransport transport,
-        IPortLister portLister,
+        IReadOnlyList<ITransport> transports,
         ILogFileWriter logFileWriter,
         IUiDispatcher uiDispatcher,
-        int maxLogEntries = 500
+        int maxLogEntries = 500,
+        string? initialEndpoint = null
     )
     {
+        if (transports.Count == 0)
+        {
+            throw new ArgumentException(
+                "Нужен хотя бы один транспорт.",
+                nameof(transports)
+            );
+        }
+
         _frameReader = frameReader;
-        _transport = transport;
-        _portLister = portLister;
+        Transports = transports;
         _logFileWriter = logFileWriter;
         _uiDispatcher = uiDispatcher;
         _boundedLog = new BoundedLog(LogEntries, maxLogEntries);
 
-        _transport.DataReceived += OnDataReceived;
-        _transport.ConnectionStateChanged += OnConnectionStateChanged;
+        // Напрямую в поле, не через свойство: сеттер SelectedTransport дёргает
+        // RefreshEndpoints, а команды на этот момент ещё не созданы.
+        _selectedTransport = transports[0];
+
+        // Подписываемся сразу на все транспорты, а не только на активный:
+        // события всё равно шлёт лишь тот, у кого вызван Open, зато не нужно
+        // переподписываться при каждом Connect/Disconnect.
+        foreach (var transport in Transports)
+        {
+            transport.DataReceived += OnDataReceived;
+            transport.ConnectionStateChanged += OnConnectionStateChanged;
+        }
+
+        RefreshEndpointsCommand = new RelayCommand(RefreshEndpoints);
+        ConnectCommand = new RelayCommand(Connect, CanConnect);
+        DisconnectCommand = new RelayCommand(Disconnect, CanDisconnect);
+
+        RefreshEndpoints();
+
+        // Порт из настроек — только предвыбор в списке, не автоподключение.
+        // Если такого порта в системе сейчас нет, остаётся выбор RefreshEndpoints.
+        if (initialEndpoint != null && AvailableEndpoints.Contains(initialEndpoint))
+        {
+            SelectedEndpoint = initialEndpoint;
+        }
+
         _processingTask = Task.Run(() => ProcessFramesAsync(_processingCts.Token));
     }
 
-    public string Greeting => "Welcome to Avalonia!";
-    public IReadOnlyList<string> AvailablePorts => _portLister.GetAvailablePorts();
+    // Все известные приложению способы подключения (Serial, WiFi-заглушка, ...) —
+    // источник для ComboBox выбора транспорта в GUI.
+    public IReadOnlyList<ITransport> Transports { get; }
 
-    // GUI смотрит сюда, чтобы показать, разорван ли порт и идёт ли переподключение
-    // (см. SerialTransport.ConnectionStateChanged) — без парсинга текста лога.
-    public ConnectionState ConnectionStatus
-    {
-        get => _connectionStatus;
-        private set => SetProperty(ref _connectionStatus, value);
-    }
+    // Точки подключения выбранного транспорта (COM-порты / адреса устройств) —
+    // источник для второго ComboBox. Обновляется при смене транспорта и по кнопке.
+    public ObservableCollection<string> AvailableEndpoints { get; } = new();
 
     // Сюда GUI смотрит, чтобы показать лог принятых кадров. Ограничена по размеру
     // через _boundedLog — полный, неограниченный лог всегда есть в файле (LogFileWriter).
     public ObservableCollection<string> LogEntries { get; } = new();
 
-    // Вызывается напрямую из read-потока SerialTransport (см. SerialTransport.RunLoop).
-    private void OnConnectionStateChanged(ConnectionState state)
+    public RelayCommand RefreshEndpointsCommand { get; }
+    public RelayCommand ConnectCommand { get; }
+    public RelayCommand DisconnectCommand { get; }
+
+    public ITransport SelectedTransport
     {
-        _uiDispatcher.Post(() => ConnectionStatus = state);
+        get => _selectedTransport;
+        set
+        {
+            if (SetProperty(ref _selectedTransport, value))
+            {
+                // У другого транспорта — другие точки подключения
+                RefreshEndpoints();
+            }
+        }
     }
 
-    // Вызывается напрямую из read-потока SerialTransport (см. SerialTransport.ReadLoop).
+    public string? SelectedEndpoint
+    {
+        get => _selectedEndpoint;
+        set
+        {
+            if (SetProperty(ref _selectedEndpoint, value))
+            {
+                ConnectCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    // GUI смотрит сюда, чтобы показать, разорвана ли связь и идёт ли переподключение
+    // (см. ITransport.ConnectionStateChanged) — без парсинга текста лога.
+    public ConnectionState ConnectionStatus
+    {
+        get => _connectionStatus;
+        private set
+        {
+            if (SetProperty(ref _connectionStatus, value))
+            {
+                // Доступность кнопок зависит от статуса — пересчитываем при каждой смене
+                ConnectCommand.NotifyCanExecuteChanged();
+                DisconnectCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    private bool CanConnect() =>
+        SelectedEndpoint != null && ConnectionStatus == ConnectionState.Disconnected;
+
+    // Reconnecting тоже считается "подключён" в смысле кнопки: Disconnect в этом
+    // состоянии — это способ отменить бесконечные попытки переподключения.
+    private bool CanDisconnect() => ConnectionStatus != ConnectionState.Disconnected;
+
+    private void Connect()
+    {
+        if (SelectedEndpoint == null)
+            return;
+
+        // Защита от повторного вызова: прежний активный транспорт закрываем
+        // до открытия нового, чтобы не осталось двух живых read-потоков.
+        _activeTransport?.Close();
+
+        _activeTransport = SelectedTransport;
+        _activeTransport.Open(SelectedEndpoint);
+    }
+
+    private void Disconnect()
+    {
+        _activeTransport?.Close();
+        _activeTransport = null;
+
+        // Close() по команде пользователя — штатная остановка, а не разрыв,
+        // транспорт сам ConnectionStateChanged не поднимает. Статус выставляем сами.
+        ConnectionStatus = ConnectionState.Disconnected;
+    }
+
+    private void RefreshEndpoints()
+    {
+        var endpoints = SelectedTransport.GetAvailableEndpoints();
+
+        AvailableEndpoints.Clear();
+        foreach (var endpoint in endpoints)
+        {
+            AvailableEndpoints.Add(endpoint);
+        }
+
+        // Прежний выбор сохраняем, только если он всё ещё существует,
+        // иначе берём первую доступную точку (или null, если список пуст —
+        // тогда CanConnect не даст нажать "Подключить").
+        if (SelectedEndpoint == null || !AvailableEndpoints.Contains(SelectedEndpoint))
+        {
+            SelectedEndpoint = AvailableEndpoints.FirstOrDefault();
+        }
+    }
+
+    // Вызывается напрямую из read-потока транспорта (см. SerialTransport.RunLoop).
+    private void OnConnectionStateChanged(ConnectionState state)
+    {
+        _uiDispatcher.Post(() =>
+        {
+            // Если пользователь уже нажал "Отключить", запоздавшее событие от
+            // только что закрытого транспорта не должно перетирать статус.
+            if (_activeTransport != null)
+            {
+                ConnectionStatus = state;
+            }
+        });
+    }
+
+    // Вызывается напрямую из read-потока транспорта (см. SerialTransport.ReadLoop).
     // Должен оставаться максимально дешёвым: только выделение кадров из потока байт
     // (FrameReader.Append — операции в памяти без I/O) и запись готовых кадров в канал.
     // Никакого разбора протокола и никакого I/O здесь быть не должно.
@@ -141,14 +278,17 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    // Останавливает консьюмера и отписывается от порта. Вызывается из App при выходе
-    // из приложения (см. App.axaml.cs), чтобы не оставлять висящую фоновую задачу.
-    // LogFileWriter здесь намеренно не закрывается — им управляет тот, кто его создал
-    // (App.axaml.cs), по аналогии с transport/portLister, которыми VM тоже не владеет.
+    // Останавливает консьюмера и отписывается от транспортов. Вызывается из App при
+    // выходе из приложения (см. App.axaml.cs). Сами транспорты здесь не закрываются —
+    // ими, как и LogFileWriter, владеет тот, кто их создал (App.axaml.cs).
     public void Dispose()
     {
-        _transport.DataReceived -= OnDataReceived;
-        _transport.ConnectionStateChanged -= OnConnectionStateChanged;
+        foreach (var transport in Transports)
+        {
+            transport.DataReceived -= OnDataReceived;
+            transport.ConnectionStateChanged -= OnConnectionStateChanged;
+        }
+
         _frameChannel.Writer.TryComplete();
         _processingCts.Cancel();
 
