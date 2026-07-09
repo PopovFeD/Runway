@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Runway.Logging;
 
 // Пишет полный, ничем не ограниченный лог принятых кадров на диск.
@@ -23,7 +25,11 @@ public class LogFileWriter : ILogFileWriter
 
     public void WriteLine(string line)
     {
-        _writer.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}  {line}");
+        // CultureInfo.InvariantCulture — иначе ":" в формате даты/времени заменяется
+        // на TimeSeparator текущей локали (не везде это ":"), и лог с одной машины
+        // может визуально не совпадать по формату с логом на другой.
+        string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
+        _writer.WriteLine($"{timestamp}  {line}");
     }
 
     public void Dispose()

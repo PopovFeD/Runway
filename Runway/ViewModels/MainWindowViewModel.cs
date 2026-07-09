@@ -1,4 +1,5 @@
 ﻿using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -90,8 +91,15 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                     object packet = PacketParser.Parse(frame);
                     line = packet switch
                     {
+                        // CultureInfo.InvariantCulture — иначе на системах с русской локалью
+                        // {t.Temperature:F2} даёт "24,53" вместо "24.53" (запятая вместо точки
+                        // как разделитель дробной части). Лог должен выглядеть одинаково
+                        // независимо от локали ОС, на которой запущено приложение.
                         TelemetryPacket t =>
-                            $"Seq={frame.Sequence}  T={t.Temperature:F2}°C  H={t.Humidity:F2}%",
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"Seq={frame.Sequence}  T={t.Temperature:F2}°C  H={t.Humidity:F2}%"
+                            ),
                         string s => $"Seq={frame.Sequence}  {s}",
                         _ => $"Seq={frame.Sequence}  Type={frame.MessageType}",
                     };
