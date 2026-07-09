@@ -273,7 +273,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                 string line;
                 try
                 {
-                    object packet = PacketParser.Parse(frame);
+                    Packet packet = PacketParser.Parse(frame);
 
                     // Телеметрия — в БД. Мы в консьюмере, read-поток порта это
                     // не задевает (ради чего Channel<Frame> и заводился).
@@ -310,7 +310,14 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                             CultureInfo.InvariantCulture,
                             $"Seq={frame.Sequence}  T={t.Temperature:F2}°C  H={t.Humidity:F2}%"
                         ),
-                        string s => $"Seq={frame.Sequence}  {s}",
+                        EnvironmentPacket e => string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"Seq={frame.Sequence}  P={e.PressureHpa:F2} hPa  L={e.LightLux:F2} lx"
+                        ),
+                        // ToUpperInvariant — служебные записи в логе исторически
+                        // выглядят как "PING"/"PONG", а не "Ping"
+                        ControlPacket c =>
+                            $"Seq={frame.Sequence}  {c.Type.ToString().ToUpperInvariant()}",
                         _ => $"Seq={frame.Sequence}  Type={frame.MessageType}",
                     };
                 }

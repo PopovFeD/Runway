@@ -34,4 +34,30 @@ public static class PacketBuilder
 
         return new Frame(version, (byte)MessageType.Telemetry, sequence, payload);
     }
+
+    public static Frame CreateEnvironment(
+        byte version,
+        ushort sequence,
+        double pressureHpa,
+        double lightLux
+    )
+    {
+        // Схема как в ParseEnvironment: uint32 Па + uint32 сотые люкса, little-endian
+        uint pressurePa = (uint)Math.Round(pressureHpa * 100);
+        uint lightCentiLux = (uint)Math.Round(lightLux * 100);
+
+        byte[] payload =
+        {
+            (byte)(pressurePa & 0xFF),
+            (byte)((pressurePa >> 8) & 0xFF),
+            (byte)((pressurePa >> 16) & 0xFF),
+            (byte)((pressurePa >> 24) & 0xFF),
+            (byte)(lightCentiLux & 0xFF),
+            (byte)((lightCentiLux >> 8) & 0xFF),
+            (byte)((lightCentiLux >> 16) & 0xFF),
+            (byte)((lightCentiLux >> 24) & 0xFF),
+        };
+
+        return new Frame(version, (byte)MessageType.Environment, sequence, payload);
+    }
 }

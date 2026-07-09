@@ -1,6 +1,6 @@
 namespace Runway.Protocol;
 
-public class TelemetryPacket
+public sealed record TelemetryPacket : Packet
 {
     public double Temperature { get; init; }
 

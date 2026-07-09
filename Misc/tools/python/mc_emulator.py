@@ -15,6 +15,10 @@ MAGIC = 0xAA55
 VERSION = 1
 
 TYPE_SENSOR = 0x10  # Runway.Protocol.MessageType.Telemetry
+TYPE_ENV = 0x11  # Runway.Protocol.MessageType.Environment
+
+# Каждый какой по счёту кадр — окружение (давление/свет) вместо температуры/влажности
+ENV_EVERY = 5
 
 
 @dataclass(slots=True)
@@ -40,6 +44,14 @@ def crc16(data: bytes) -> int:
 def encode_sensor(data: SensorData) -> bytes:
     return struct.pack(
         "<hh", int(round(data.temperature * 100)), int(round(data.humidity * 100))
+    )
+
+
+def encode_env(pressure_hpa: float, light_lux: float) -> bytes:
+    # Схема Runway.Protocol.PacketParser.ParseEnvironment:
+    # uint32 давление в Па + uint32 сотые доли люкса, little-endian
+    return struct.pack(
+        "<II", int(round(pressure_hpa * 100)), int(round(light_lux * 100))
     )
 
 
@@ -70,11 +82,23 @@ def main():
 
     temperature = 24.0
     humidity = 60.0
+    pressure = 1013.25
+    light = 350.0
     sequence = 0
 
     def emit_packet(
         sequence_value: int, temperature_value: float, humidity_value: float
     ) -> bytes:
+        # Каждый ENV_EVERY-й кадр — окружение, остальные — температура/влажность:
+        # демонстрирует C#-стороне разные типы сообщений вперемешку
+        if sequence_value % ENV_EVERY == ENV_EVERY - 1:
+            payload = encode_env(pressure, light)
+            packet = encode_packet(TYPE_ENV, sequence_value, payload)
+            print(
+                f"SEQ={sequence_value:5d}  P={pressure:8.2f}  L={light:7.2f}  BYTES={len(packet)}"
+            )
+            return packet
+
         sensor = SensorData(temperature_value, humidity_value)
         payload = encode_sensor(sensor)
         packet = encode_packet(TYPE_SENSOR, sequence_value, payload)
@@ -99,6 +123,8 @@ def main():
             while True:
                 temperature += random.uniform(-0.15, 0.15)
                 humidity += random.uniform(-0.40, 0.40)
+                pressure += random.uniform(-0.30, 0.30)
+                light = max(0.0, light + random.uniform(-15.0, 15.0))
                 packet = emit_packet(sequence, temperature, humidity)
                 port.write(packet)
                 sequence = (sequence + 1) & 0xFFFF

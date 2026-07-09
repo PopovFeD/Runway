@@ -5,7 +5,7 @@
 (либо собрать `Frame` из данных в обратную сторону).
 
 Файлы: `Runway/Core/Protocol/MessageType.cs`, `Crc16.cs`, `PacketParser.cs`,
-`PacketBuilder.cs`, `TelemetryPacket.cs`.
+`PacketBuilder.cs`, `Packet.cs`, `TelemetryPacket.cs`, `EnvironmentPacket.cs`.
 
 ---
 
@@ -26,7 +26,7 @@ Explicitly **не** входит: поиск границ кадра, буфер
 public enum MessageType : byte
 {
     Ping = 0x01, Pong = 0x02,
-    Telemetry = 0x10,
+    Telemetry = 0x10, Environment = 0x11,
     Command = 0x20, Ack = 0x21,
     Error = 0xFF,
 }
@@ -35,7 +35,7 @@ public enum MessageType : byte
 Это единственный источник истины для кодов типов сообщений. Python-эмулятор
 (`mc_emulator.py`) обязан использовать те же числовые значения — синхронизация
 ручная, автоматической проверки нет (см. известное ограничение ниже).
-На момент написания реально используется только `Telemetry`; `Command`,
+Реально используются `Telemetry` и `Environment`; `Command`,
 `Ack`, `Error` зарезервированы под будущее расширение (управление устройством).
 
 ## `Crc16`
@@ -46,23 +46,24 @@ CRC-16/MODBUS (полином `0xA001`, старт `0xFFFF`, сдвиг впра
 неявно не используется (CRC добавляется на уровне `Framing`, не здесь) — сюда
 вынесен только сам алгоритм как общая утилита.
 
-## `PacketParser.Parse(Frame frame) : object`
+## `PacketParser.Parse(Frame frame) : Packet`
 
 ```csharp
 switch ((MessageType)frame.MessageType)
 {
-    case MessageType.Telemetry: return ParseTelemetry(frame); // -> TelemetryPacket
-    case MessageType.Ping:  return "PING";
-    case MessageType.Pong:  return "PONG";
-    case MessageType.Ack:   return "ACK";
-    case MessageType.Error: return "ERROR";
+    case MessageType.Telemetry:   return ParseTelemetry(frame);   // -> TelemetryPacket
+    case MessageType.Environment: return ParseEnvironment(frame); // -> EnvironmentPacket
+    case MessageType.Ping: case ...: return new ControlPacket(type); // Ping/Pong/Ack/Error
     default: throw new NotSupportedException(...);
 }
 ```
 
-Возвращает `object`: для `Telemetry` — типизированный `TelemetryPacket`, для
-control-сообщений — просто строку-метку. Это осознанный временный компромисс,
-не финальная архитектура (см. ограничения).
+Возвращает `abstract record Packet` (см. `Packet.cs`): сенсорные типы — свои
+record'ы с данными, служебные (Ping/Pong/Ack/Error) — общий `ControlPacket`
+с полем `Type`. Вызывающий код матчит подтипы switch-выражением.
+
+`ParseEnvironment` ожидает ровно 8 байт (`uint32` давление в Па — 101325 Па
+не влезает в ushort, + `uint32` сотые доли люкса), схема "x100" та же.
 
 `ParseTelemetry` жёстко ожидает payload ровно 4 байта (`ushort` temp + `ushort`
 hum, обе — сотые доли единицы, т.е. `24.53°C` передаётся как `2453`). При другой
@@ -88,20 +89,17 @@ little-endian вручную (`byte & 0xFF`, `byte >> 8`), без `BitConverter`
 На данный момент `PacketBuilder` не используется нигде в реальном приложении
 (только в тестах) — актуален, когда появится отправка команд на устройство.
 
-## `TelemetryPacket`
+## Пакеты
 
-Простой DTO: `Temperature: double`, `Humidity: double`. Без валидации диапазона.
+`TelemetryPacket` (`Temperature`, `Humidity`), `EnvironmentPacket`
+(`PressureHpa`, `LightLux`), `ControlPacket` (`Type`) — record'ы без валидации
+диапазонов, все наследуют `Packet`. Новый тип сообщения = новый record +
+ветка в парсере/билдере + константа в эмуляторе.
 
 ---
 
 ## Известные ограничения
 
-* **`object` как тип возврата `Parse`.** Годится для двух текущих случаев
-  (типизированный пакет / строка-заглушка), но не масштабируется — добавление
-  `Command` с параметрами потребует либо ещё один `object`-каст на вызывающей
-  стороне, либо перехода на иерархию `abstract record Packet` с подтипами
-  (`TelemetryPacket`, `CommandPacket`, ...) и паттерн-матчинг вместо `switch`
-  по enum. Пока не сделано намеренно — рано усложнять при одном реальном типе.
 * **Ручная синхронизация `MessageType` с Python.** Уже приводило к реальному
   багу (эмулятор слал `0x01` вместо `0x10` для телеметрии, см. `Misc/diary/2026.07.08.md`).
   Автоматической проверки/общего файла-источника для обеих сторон протокола нет.
