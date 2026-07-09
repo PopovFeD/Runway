@@ -1,3 +1,4 @@
 project.zip
 
 *.patch
+.vscode/
