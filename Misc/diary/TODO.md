@@ -6,9 +6,9 @@
 - [x] framing.md
 - [x] protocol.md
 - [x] storage.md
-- [ ] settings.md
-- [ ] viewmodels.md (MainWindowViewModel, ViewLocator, связь с GUI)
-- [ ] logging.md — телеметрийный лог (LogFileWriter/BoundedLog) vs
+- [x] settings.md
+- [x] viewmodels.md (MainWindowViewModel, ViewLocator, связь с GUI)
+- [x] logging.md — телеметрийный лог (LogFileWriter/BoundedLog) vs
       diagnostics-лог (Microsoft.Extensions.Logging/FileLoggerProvider),
       почему их два и почему не Serilog/NLog
 - [ ] README.md-индекс по Misc/docs/, когда наберётся достаточно файлов
