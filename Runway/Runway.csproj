@@ -35,7 +35,7 @@
          GHSA-2m69-gcr7-jv3q). Версия проставлена без доступа к NuGet — если
          restore её не найдёт или предупреждение останется, поднять до
          последней: dotnet add Runway package SQLitePCLRaw.bundle_e_sqlite3 -->
-    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.0" />
     <PackageReference Include="System.IO.Ports" Version="10.0.0" />
