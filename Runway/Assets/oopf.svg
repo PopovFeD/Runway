@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1152 1152" width="512" height="512">
+  <title>Personal mark (4 stripes)</title>
+  <desc>Shield silhouette (original curve) filled by 4 horizontal stripes; the 2nd stripe from the top has a central gap equal in width to the gap between stripes. No app-icon/avatar crop applied — plain square canvas. Background F5F3EF, mark #141414.</desc>
+
+  <defs>
+    
+    <mask id="shield-cutout" maskUnits="userSpaceOnUse">
+      <rect width="1152" height="1152" fill="#000000"></rect>
+      <g id="shield-group" transform="matrix(1.4134969 0 0 1.4134969 -383 0)">
+        <path id="shield-shape" d="M897 344V143H460v201c0 56 6 163 111 257 46 42 67 53 108 71 41-19 62-31 107-71 105-94 111-201 111-257z" fill="#ffffff" stroke="#ffffff" stroke-width="18" stroke-linejoin="round"></path>
+      </g>
+    </mask>
+  </defs>
+
+  
+  <rect id="background" x="0" y="0" width="1152" height="1152" fill="#F5F3EF"></rect>
+
+  
+  <g id="stripes" mask="url(#shield-cutout)" fill="#141414">
+    <rect id="stripe-1" x="172.8" y="172.8" width="806.4" height="194.1"></rect>
+    <rect id="stripe-2-left" x="172.8" y="376.9" width="398.2" height="194.1"></rect>
+    <rect id="stripe-2-right" x="581.0" y="376.9" width="398.2" height="194.1"></rect>
+    <rect id="stripe-3" x="172.8" y="581.0" width="806.4" height="194.1"></rect>
+    <rect id="stripe-4" x="172.8" y="785.1" width="806.4" height="194.1"></rect>
+  </g>
+</svg>

@@ -2,3 +2,7 @@ project.zip
 
 *.patch
 .vscode/
+
+Misc/tools/python/build/
+Misc/tools/python/dist/
+Misc/tools/python/mc_emulator.spec

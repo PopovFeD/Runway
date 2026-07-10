@@ -4,7 +4,7 @@
         xmlns:tr="using:Runway.Transport"
         x:Class="Runway.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Icon="/Assets/avalonia-logo.ico"
+        Icon="/Assets/oopf.ico"
         Title="Runway"
         MinWidth="760" MinHeight="480">
 
