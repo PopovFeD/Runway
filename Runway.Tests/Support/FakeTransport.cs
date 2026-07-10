@@ -7,7 +7,7 @@ namespace Runway.Tests.Support;
 // они только что пришли с устройства, и поднять смену состояния подключения.
 // Для настоящего COM-порта см. SerialTransportIntegrationTests — это другой
 // уровень тестирования.
-public class FakeTransport : ITransport
+public class FakeTransport : ITransport, ISerialSettings
 {
     private readonly List<string> _endpoints;
 
@@ -19,6 +19,10 @@ public class FakeTransport : ITransport
     public string DisplayName { get; set; } = "Fake";
 
     public bool IsOpen { get; private set; }
+
+    // ISerialSettings — чтобы тестировать применение бод/задержки из GUI
+    public int BaudRate { get; set; } = 115200;
+    public int ReconnectDelaySeconds { get; set; } = 2;
 
     // Что и сколько раз с этим транспортом делали — для проверок в тестах
     public string? LastOpenedEndpoint { get; private set; }

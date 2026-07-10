@@ -85,8 +85,27 @@ public partial class App : Application
                 sessionTracker,
                 settings.MaxLogEntries,
                 initialEndpoint: settings.PortName,
-                hiddenSections: settings.HiddenDashboardSections
+                hiddenSections: settings.HiddenDashboardSections,
+                initialTransportName: settings.TransportName
             );
+
+            // Успешное "Подключить" запоминает выбор: транспорт, порт,
+            // бод и задержку переподключения — в settings.json
+            mainViewModel.Connection.ConnectionSettingsChanged += () =>
+            {
+                var connection = mainViewModel.Connection;
+                settings.TransportName = connection.SelectedTransport.DisplayName;
+                settings.PortName = connection.SelectedEndpoint ?? settings.PortName;
+                if (int.TryParse(connection.BaudRateText, out int baud) && baud > 0)
+                {
+                    settings.BaudRate = baud;
+                }
+                if (int.TryParse(connection.ReconnectDelayText, out int delay) && delay >= 0)
+                {
+                    settings.ReconnectDelaySeconds = delay;
+                }
+                SettingsLoader.Save(settings);
+            };
 
             // Галочки разделов Дашборда (вкладка "Настройки") сохраняются
             // в settings.json при каждом переключении

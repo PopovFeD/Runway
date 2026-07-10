@@ -4,15 +4,15 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Runway.Transport;
 
-public class SerialTransport : ITransport
+public class SerialTransport : ITransport, ISerialSettings
 {
     private readonly ILogger<SerialTransport> _logger;
-    private readonly TimeSpan _reconnectDelay;
 
-    // Скорость порта — конфигурация транспорта (задаётся один раз из настроек),
-    // а не свойство точки подключения: endpoint в терминах ITransport — это
-    // только имя порта ("COM6"), которое пользователь выбирает в GUI.
-    private readonly int _baudRate;
+    // Скорость и задержка переподключения теперь настраиваются из GUI
+    // (ISerialSettings) и применяются при следующем открытии порта.
+    // int-свойства: запись атомарна, читает их фоновый поток RunLoop.
+    public int BaudRate { get; set; }
+    public int ReconnectDelaySeconds { get; set; }
 
     private SerialPort? _port;
     private Thread? _runThread;
@@ -26,9 +26,9 @@ public class SerialTransport : ITransport
         TimeSpan? reconnectDelay = null
     )
     {
-        _baudRate = baudRate;
+        BaudRate = baudRate;
         _logger = logger ?? NullLogger<SerialTransport>.Instance;
-        _reconnectDelay = reconnectDelay ?? TimeSpan.FromSeconds(2);
+        ReconnectDelaySeconds = (int)(reconnectDelay ?? TimeSpan.FromSeconds(2)).TotalSeconds;
     }
 
     public string DisplayName => "Serial (COM)";
@@ -64,7 +64,7 @@ public class SerialTransport : ITransport
     {
         _keepRunning = false;
 
-        // Join не привязан к _reconnectDelay: и ReadLoop (ReadTimeout=500мс), и пауза
+        // Join не привязан к задержке переподключения: и ReadLoop (ReadTimeout=500мс), и пауза
         // между попытками переподключения (WaitBeforeRetry) проверяют _keepRunning
         // короткими шагами, так что поток должен успеть выйти намного раньше.
         _runThread?.Join(1500);
@@ -88,7 +88,7 @@ public class SerialTransport : ITransport
             _logger.LogInformation(
                 "Порт {PortName} открыт ({BaudRate} бод).",
                 _portName,
-                _baudRate
+                BaudRate
             );
             ConnectionStateChanged?.Invoke(ConnectionState.Connected);
 
@@ -101,7 +101,7 @@ public class SerialTransport : ITransport
                 _logger.LogWarning(
                     "Порт {PortName} разорван, пробуем переподключиться через {Delay}.",
                     _portName,
-                    _reconnectDelay
+                    TimeSpan.FromSeconds(ReconnectDelaySeconds)
                 );
                 ConnectionStateChanged?.Invoke(ConnectionState.Disconnected);
                 WaitBeforeRetry();
@@ -113,7 +113,7 @@ public class SerialTransport : ITransport
     {
         try
         {
-            _port = new SerialPort(_portName, _baudRate) { ReadTimeout = 500 };
+            _port = new SerialPort(_portName, BaudRate) { ReadTimeout = 500 };
             _port.Open();
             return true;
         }
@@ -133,7 +133,8 @@ public class SerialTransport : ITransport
 
         var step = TimeSpan.FromMilliseconds(100);
         var elapsed = TimeSpan.Zero;
-        while (_keepRunning && elapsed < _reconnectDelay)
+        var delay = TimeSpan.FromSeconds(ReconnectDelaySeconds);
+        while (_keepRunning && elapsed < delay)
         {
             Thread.Sleep(step);
             elapsed += step;

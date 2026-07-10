@@ -43,7 +43,8 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         int maxLogEntries = 500,
         string? initialEndpoint = null,
         string? exportDirectory = null,
-        IReadOnlyCollection<string>? hiddenSections = null
+        IReadOnlyCollection<string>? hiddenSections = null,
+        string? initialTransportName = null
     )
     {
         _frameReader = frameReader;
@@ -57,7 +58,8 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             uiDispatcher,
             appStore,
             _sessions,
-            initialEndpoint
+            initialEndpoint,
+            initialTransportName
         );
         Logs = new LogsViewModel(appStore, _sessions, exportDirectory);
         Export = new ExportViewModel(appStore, _sessions, exportDirectory);

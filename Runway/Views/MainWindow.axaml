@@ -164,6 +164,19 @@
                         <Button Content="Обновить список" Command="{Binding Connection.RefreshEndpointsCommand}"/>
                     </StackPanel>
 
+                    <!-- Параметры Serial; для транспортов без них (WiFi) скрыты -->
+                    <StackPanel Orientation="Horizontal" Spacing="12"
+                                IsVisible="{Binding Connection.HasSerialSettings}">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Скорость (бод)" Classes="tileTitle"/>
+                            <TextBox MinWidth="120" Text="{Binding Connection.BaudRateText}"/>
+                        </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Задержка переподключения, с" Classes="tileTitle"/>
+                            <TextBox MinWidth="120" Text="{Binding Connection.ReconnectDelayText}"/>
+                        </StackPanel>
+                    </StackPanel>
+
 
                     <TextBlock Text="{Binding Connection.StatusText}" Margin="0,6,0,0"/>
                 </StackPanel>

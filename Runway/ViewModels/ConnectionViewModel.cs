@@ -33,7 +33,8 @@ public class ConnectionViewModel : ViewModelBase, IDisposable
         IUiDispatcher uiDispatcher,
         IAppStore? appStore,
         SessionTracker sessions,
-        string? initialEndpoint = null
+        string? initialEndpoint = null,
+        string? initialTransportName = null
     )
     {
         if (transports.Count == 0)
@@ -45,7 +46,17 @@ public class ConnectionViewModel : ViewModelBase, IDisposable
         _uiDispatcher = uiDispatcher;
         _appStore = appStore;
         _sessions = sessions;
-        _selectedTransport = transports[0];
+        // Сверка при старте: сохранённый транспорт может уже не существовать —
+        // тогда молча берём первый (аналогично initialEndpoint ниже)
+        _selectedTransport =
+            transports.FirstOrDefault(t => t.DisplayName == initialTransportName)
+            ?? transports[0];
+
+        if (_selectedTransport is ISerialSettings serial)
+        {
+            _baudRateText = serial.BaudRate.ToString();
+            _reconnectDelayText = serial.ReconnectDelaySeconds.ToString();
+        }
 
         foreach (var transport in Transports)
         {
@@ -76,6 +87,45 @@ public class ConnectionViewModel : ViewModelBase, IDisposable
 
     public string ToggleConnectionText => _activeTransport == null ? "Подключить" : "Отключить";
 
+    // Поднимается после успешного запуска подключения — App сохраняет выбор
+    // (транспорт/порт/бод/задержку) в settings.json, VM про файл не знает.
+    public event Action? ConnectionSettingsChanged;
+
+    // --- Параметры Serial (видны, только если транспорт их поддерживает) ---
+
+    public bool HasSerialSettings => SelectedTransport is ISerialSettings;
+
+    private string _baudRateText = "115200";
+    public string BaudRateText
+    {
+        get => _baudRateText;
+        set => SetProperty(ref _baudRateText, value);
+    }
+
+    private string _reconnectDelayText = "2";
+    public string ReconnectDelayText
+    {
+        get => _reconnectDelayText;
+        set => SetProperty(ref _reconnectDelayText, value);
+    }
+
+    // Применяем то, что распарсилось; мусор в поле молча игнорируется
+    // (поле остаётся, транспорт работает на прежнем значении)
+    private void ApplySerialSettings(ITransport transport)
+    {
+        if (transport is not ISerialSettings serial)
+            return;
+
+        if (int.TryParse(BaudRateText, out int baud) && baud > 0)
+        {
+            serial.BaudRate = baud;
+        }
+        if (int.TryParse(ReconnectDelayText, out int delay) && delay >= 0)
+        {
+            serial.ReconnectDelaySeconds = delay;
+        }
+    }
+
     public ITransport SelectedTransport
     {
         get => _selectedTransport;
@@ -83,8 +133,9 @@ public class ConnectionViewModel : ViewModelBase, IDisposable
         {
             if (SetProperty(ref _selectedTransport, value))
             {
-                // У другого транспорта — другие точки подключения
+                // У другого транспорта — другие точки подключения и параметры
                 RefreshEndpoints();
+                OnPropertyChanged(nameof(HasSerialSettings));
             }
         }
     }
@@ -187,8 +238,12 @@ public class ConnectionViewModel : ViewModelBase, IDisposable
             $"Подключение: {_activeTransport.DisplayName} · {SelectedEndpoint}"
         );
 
+        ApplySerialSettings(_activeTransport);
         _activeTransport.Open(SelectedEndpoint);
         NotifyConnectionFactChanged();
+
+        // Выбор подключения запоминается (persist в App)
+        ConnectionSettingsChanged?.Invoke();
     }
 
     private void Disconnect()

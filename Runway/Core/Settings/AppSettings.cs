@@ -7,6 +7,10 @@ public class AppSettings
     // кнопке "Подключить" (см. MainWindowViewModel.ConnectCommand).
     public string PortName { get; set; } = "COM6";
 
+    // Транспорт, предвыбранный при старте (DisplayName); вместе с PortName
+    // обновляется при каждом успешном "Подключить".
+    public string TransportName { get; set; } = "Serial (COM)";
+
     public int BaudRate { get; set; } = 115200;
 
     // Сколько последних строк держать в живом выводе GUI (LogEntries) —

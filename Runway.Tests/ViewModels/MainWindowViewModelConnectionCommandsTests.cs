@@ -208,6 +208,57 @@ public class MainWindowViewModelConnectionCommandsTests
         vm.Dispose();
     }
 
+    [Fact]
+    public void Connect_AppliesSerialSettings_AndRaisesSaveEvent()
+    {
+        var transport = new FakeTransport("COM3");
+        var vm = CreateViewModel(new[] { transport });
+        bool saveRequested = false;
+        vm.Connection.ConnectionSettingsChanged += () => saveRequested = true;
+
+        vm.Connection.BaudRateText = "9600";
+        vm.Connection.ReconnectDelayText = "5";
+        vm.Connection.ConnectCommand.Execute(null);
+
+        Assert.Equal(9600, transport.BaudRate);
+        Assert.Equal(5, transport.ReconnectDelaySeconds);
+        Assert.True(saveRequested);
+
+        // Мусор в поле молча игнорируется — транспорт остаётся на прежнем значении
+        vm.Connection.DisconnectCommand.Execute(null);
+        vm.Connection.BaudRateText = "не число";
+        vm.Connection.ConnectCommand.Execute(null);
+        Assert.Equal(9600, transport.BaudRate);
+
+        vm.Dispose();
+    }
+
+    [Fact]
+    public void Ctor_PreselectsSavedTransport_OrFallsBackToFirst()
+    {
+        var serial = new FakeTransport("COM3") { DisplayName = "Serial" };
+        var wifi = new FakeTransport("192.168.1.42:1") { DisplayName = "WiFi" };
+
+        var vm = new MainWindowViewModel(
+            new FrameReader(),
+            new[] { serial, wifi },
+            new ImmediateUiDispatcher(),
+            initialTransportName: "WiFi"
+        );
+        Assert.Equal("WiFi", vm.Connection.SelectedTransport.DisplayName);
+        vm.Dispose();
+
+        // Сохранённый транспорт исчез — берём первый, не падаем
+        var vm2 = new MainWindowViewModel(
+            new FrameReader(),
+            new[] { serial, wifi },
+            new ImmediateUiDispatcher(),
+            initialTransportName: "Bluetooth"
+        );
+        Assert.Equal("Serial", vm2.Connection.SelectedTransport.DisplayName);
+        vm2.Dispose();
+    }
+
     private static MainWindowViewModel CreateViewModel(
         FakeTransport[] transports,
         string? initialEndpoint = null
