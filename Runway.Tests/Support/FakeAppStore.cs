@@ -36,9 +36,12 @@ public class FakeAppStore : IAppStore
 
     public void SaveEvent(EventRecord record) => Events.Add(record);
 
-    public IReadOnlyList<EventRecord> ReadEvents(string? level, long? sessionId) =>
+    public IReadOnlyList<EventRecord> ReadEvents(
+        IReadOnlyCollection<string>? levels,
+        long? sessionId
+    ) =>
         Events
-            .Where(e => level == null || e.Level == level)
+            .Where(e => levels == null || levels.Contains(e.Level))
             .Where(e => sessionId == null || e.SessionId == sessionId)
             .ToList();
 

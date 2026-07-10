@@ -36,6 +36,9 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     // события транспорта получают тот же session_id, что и события ViewModel).
     private readonly SessionTracker _sessions;
 
+    // Куда складывать CSV-экспорт логов (см. ExportLogs); в тестах — временный каталог.
+    private readonly string _exportDirectory;
+
     // Очередь между read-потоком порта (продюсер) и разбором пакетов (консьюмер).
     // Смысл: OnDataReceived вызывается прямо из фонового потока SerialTransport.ReadLoop,
     // и всё, что там выполняется синхронно, тормозит следующий Port.Read().
@@ -61,7 +64,8 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         IAppStore? appStore = null,
         SessionTracker? sessionTracker = null,
         int maxLogEntries = 500,
-        string? initialEndpoint = null
+        string? initialEndpoint = null,
+        string? exportDirectory = null
     )
     {
         if (transports.Count == 0)
@@ -75,6 +79,8 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         _appStore = appStore;
         _sessions = sessionTracker ?? new SessionTracker();
         _boundedLog = new BoundedLog(LogEntries, maxLogEntries);
+        _exportDirectory =
+            exportDirectory ?? Path.Combine(AppContext.BaseDirectory, "exports");
 
         // Напрямую в поле, не через свойство: сеттер SelectedTransport дёргает
         // RefreshEndpoints, а команды на этот момент ещё не созданы.
@@ -93,6 +99,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         ConnectCommand = new RelayCommand(Connect, CanConnect);
         DisconnectCommand = new RelayCommand(Disconnect, CanDisconnect);
         RefreshLogsCommand = new RelayCommand(RefreshLogs);
+        ExportLogsCommand = new RelayCommand(ExportLogs);
         ToggleConnectionCommand = new RelayCommand(ToggleConnection, CanToggleConnection);
 
         RefreshEndpoints();
@@ -123,6 +130,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     public RelayCommand ConnectCommand { get; }
     public RelayCommand DisconnectCommand { get; }
     public RelayCommand RefreshLogsCommand { get; }
+    public RelayCommand ExportLogsCommand { get; }
     public RelayCommand ToggleConnectionCommand { get; }
 
     // Единая кнопка вкл/выкл в верхней панели (пункт из TODO). Решение
@@ -177,14 +185,27 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
     // --- Вкладка "Логи": фильтруемое чтение событий из БД ---
 
-    public IReadOnlyList<string> LogLevelFilters { get; } =
-        new[] { "Все", "Info", "Warning", "Error" };
-
-    private string _selectedLogLevelFilter = "Все";
-    public string SelectedLogLevelFilter
+    // Галочки-фильтры: каждая отвечает за свой тип сообщений. Что выбрано —
+    // то и показывается, и ровно то же уходит в экспорт (см. ExportLogs).
+    private bool _showInfo = true;
+    public bool ShowInfo
     {
-        get => _selectedLogLevelFilter;
-        set => SetProperty(ref _selectedLogLevelFilter, value);
+        get => _showInfo;
+        set => SetProperty(ref _showInfo, value);
+    }
+
+    private bool _showWarning = true;
+    public bool ShowWarning
+    {
+        get => _showWarning;
+        set => SetProperty(ref _showWarning, value);
+    }
+
+    private bool _showError = true;
+    public bool ShowError
+    {
+        get => _showError;
+        set => SetProperty(ref _showError, value);
     }
 
     private bool _onlyCurrentSession;
@@ -199,15 +220,30 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     // а живой поток и так виден на Дашборде.
     public ObservableCollection<string> FilteredLogEvents { get; } = new();
 
+    // Один и тот же набор уровней для показа и для экспорта — "что видишь,
+    // то и экспортируешь". null = все три галочки стоят (без SQL-фильтра).
+    private IReadOnlyCollection<string>? SelectedLevels()
+    {
+        if (ShowInfo && ShowWarning && ShowError)
+            return null;
+
+        var levels = new List<string>(3);
+        if (ShowInfo)
+            levels.Add("Info");
+        if (ShowWarning)
+            levels.Add("Warning");
+        if (ShowError)
+            levels.Add("Error");
+        return levels;
+    }
+
+    private IReadOnlyList<EventRecord> ReadFilteredEvents() =>
+        _appStore?.ReadEvents(SelectedLevels(), OnlyCurrentSession ? _sessions.CurrentId : null)
+        ?? Array.Empty<EventRecord>();
+
     private void RefreshLogs()
     {
-        if (_appStore == null)
-            return;
-
-        string? level = SelectedLogLevelFilter == "Все" ? null : SelectedLogLevelFilter;
-        long? sessionFilter = OnlyCurrentSession ? _sessions.CurrentId : null;
-
-        var events = _appStore.ReadEvents(level, sessionFilter);
+        var events = ReadFilteredEvents();
 
         FilteredLogEvents.Clear();
         foreach (var e in events)
@@ -219,6 +255,62 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                 )
             );
         }
+    }
+
+    // --- Экспорт логов: те же галочки-фильтры, что и у показа ---
+
+    private string _exportStatusText = "";
+    public string ExportStatusText
+    {
+        get => _exportStatusText;
+        private set => SetProperty(ref _exportStatusText, value);
+    }
+
+    private void ExportLogs()
+    {
+        try
+        {
+            var events = ReadFilteredEvents();
+
+            Directory.CreateDirectory(_exportDirectory);
+            string path = Path.Combine(
+                _exportDirectory,
+                $"runway-logs-{DateTime.Now:yyyyMMdd-HHmmss}.csv"
+            );
+
+            // CSV с ';' — его сразу понимает русскоязычный Excel
+            // (разделитель списка в этой локали — точка с запятой)
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("timestamp;level;category;message;session_id");
+            foreach (var e in events)
+            {
+                sb.Append(e.Timestamp.ToString("O", CultureInfo.InvariantCulture));
+                sb.Append(';').Append(e.Level);
+                sb.Append(';').Append(CsvField(e.Category));
+                sb.Append(';').Append(CsvField(e.Message));
+                sb.Append(';')
+                    .Append(e.SessionId?.ToString(CultureInfo.InvariantCulture) ?? "");
+                sb.AppendLine();
+            }
+
+            File.WriteAllText(path, sb.ToString());
+            ExportStatusText = $"Экспортировано {events.Count} записей: {path}";
+        }
+        catch (Exception ex)
+        {
+            ExportStatusText = $"Ошибка экспорта: {ex.Message}";
+        }
+    }
+
+    // Минимальное CSV-экранирование: кавычим поле, если внутри разделитель,
+    // кавычки или перенос строки; кавычки удваиваются по правилам CSV.
+    private static string CsvField(string value)
+    {
+        if (value.Contains(';') || value.Contains('"') || value.Contains('\n'))
+        {
+            return $"\"{value.Replace("\"", "\"\"")}\"";
+        }
+        return value;
     }
 
     // Событие приложения — в БД. Ошибка записи не должна ронять UI-поток

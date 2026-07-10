@@ -117,14 +117,70 @@ public class MainWindowViewModelTelemetryStoreTests
         Assert.Equal(3, store.Events.Count);
         Assert.All(store.Events, e => Assert.NotNull(e.SessionId));
 
-        vm.SelectedLogLevelFilter = "Warning";
+        // Оставляем только галочку Warning
+        vm.ShowInfo = false;
+        vm.ShowError = false;
         vm.RefreshLogsCommand.Execute(null);
 
         var line = Assert.Single(vm.FilteredLogEvents);
         Assert.Contains("Reconnecting", line);
         Assert.Contains("[Warning]", line);
 
+        // Все галочки сняты — показывать нечего
+        vm.ShowWarning = false;
+        vm.RefreshLogsCommand.Execute(null);
+        Assert.Empty(vm.FilteredLogEvents);
+
         vm.Dispose();
+    }
+
+    [Fact]
+    public void ExportLogs_WritesCsv_UsingSameCheckboxFilters()
+    {
+        string exportDir = Path.Combine(
+            Path.GetTempPath(),
+            $"runway-export-{Guid.NewGuid():N}"
+        );
+        var transport = new FakeTransport("COM3");
+        var store = new FakeAppStore();
+        var vm = new MainWindowViewModel(
+            new FrameReader(),
+            new[] { transport },
+            new ImmediateUiDispatcher(),
+            store,
+            exportDirectory: exportDir
+        );
+
+        try
+        {
+            vm.ConnectCommand.Execute(null); // Info "Подключение"
+            transport.RaiseConnectionStateChanged(
+                Runway.Transport.ConnectionState.Reconnecting
+            ); // Warning
+
+            // Экспортируем только Warning — как будто стоит одна галочка
+            vm.ShowInfo = false;
+            vm.ShowError = false;
+            vm.ExportLogsCommand.Execute(null);
+
+            Assert.StartsWith("Экспортировано 1 записей", vm.ExportStatusText);
+
+            string csvPath = Assert.Single(Directory.GetFiles(exportDir, "*.csv"));
+            string[] lines = File.ReadAllLines(csvPath);
+            Assert.Equal("timestamp;level;category;message;session_id", lines[0]);
+            Assert.Equal(2, lines.Length); // заголовок + одна запись
+            Assert.Contains(";Warning;", lines[1]);
+            Assert.Contains("Reconnecting", lines[1]);
+
+            vm.Dispose();
+        }
+        finally
+        {
+            if (Directory.Exists(exportDir))
+            {
+                Directory.Delete(exportDir, recursive: true);
+            }
+        }
     }
 
     [Fact]

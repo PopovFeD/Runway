@@ -35,6 +35,8 @@ public interface IAppStore : IDisposable
     void SaveTelemetry(TelemetryRecord record);
     void SaveEvent(EventRecord record);
 
-    // Фильтры: level == null — все уровни; sessionId == null — все сессии.
-    IReadOnlyList<EventRecord> ReadEvents(string? level, long? sessionId);
+    // Фильтры: levels == null — все уровни (пустой набор — ничего);
+    // sessionId == null — все сессии. Ровно эта же выборка используется
+    // и вкладкой "Логи", и экспортом — что видишь, то и экспортируешь.
+    IReadOnlyList<EventRecord> ReadEvents(IReadOnlyCollection<string>? levels, long? sessionId);
 }

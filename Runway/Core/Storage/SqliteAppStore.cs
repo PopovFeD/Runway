@@ -140,19 +140,45 @@ public sealed class SqliteAppStore : IAppStore
         }
     }
 
-    public IReadOnlyList<EventRecord> ReadEvents(string? level, long? sessionId)
+    public IReadOnlyList<EventRecord> ReadEvents(
+        IReadOnlyCollection<string>? levels,
+        long? sessionId
+    )
     {
+        // Пустой набор уровней — все галочки сняты, показывать нечего
+        if (levels is { Count: 0 })
+        {
+            return Array.Empty<EventRecord>();
+        }
+
         lock (_lock)
         {
             using var command = _connection.CreateCommand();
-            command.CommandText = """
+
+            // IN-список собирается из параметров ($level0, $level1, ...) —
+            // не строковой конкатенацией значений (SQL-инъекции не место
+            // даже в локальной БД)
+            string levelFilter = "1 = 1";
+            if (levels != null)
+            {
+                var names = levels.Select((_, i) => $"$level{i}");
+                levelFilter = $"level IN ({string.Join(", ", names)})";
+
+                int index = 0;
+                foreach (string level in levels)
+                {
+                    command.Parameters.AddWithValue($"$level{index}", level);
+                    index++;
+                }
+            }
+
+            command.CommandText = $"""
                 SELECT timestamp, level, category, message, session_id
                 FROM events
-                WHERE ($level IS NULL OR level = $level)
+                WHERE {levelFilter}
                   AND ($sessionId IS NULL OR session_id = $sessionId)
                 ORDER BY id;
                 """;
-            command.Parameters.AddWithValue("$level", (object?)level ?? DBNull.Value);
             command.Parameters.AddWithValue("$sessionId", (object?)sessionId ?? DBNull.Value);
 
             var records = new List<EventRecord>();

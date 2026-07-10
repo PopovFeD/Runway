@@ -168,17 +168,25 @@
 
             <TabItem Header="Логи">
                 <DockPanel>
-                    <!-- Фильтры читают события из SQLite (таблица events) по кнопке;
-                         живой поток без фильтров — на Дашборде -->
+                    <!-- Галочки-фильтры: каждая отвечает за свой тип сообщений.
+                         Что выбрано — то показывается и то же экспортируется.
+                         Чтение из SQLite (events) по кнопке; живой поток — на Дашборде -->
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal"
-                                Spacing="8" Margin="0,0,0,8">
-                        <ComboBox MinWidth="110"
-                                  ItemsSource="{Binding LogLevelFilters}"
-                                  SelectedItem="{Binding SelectedLogLevelFilter}"/>
+                                Spacing="12" Margin="0,0,0,8">
+                        <CheckBox Content="Info" IsChecked="{Binding ShowInfo}"/>
+                        <CheckBox Content="Warning" IsChecked="{Binding ShowWarning}"/>
+                        <CheckBox Content="Error" IsChecked="{Binding ShowError}"/>
                         <CheckBox Content="Только текущая сессия"
                                   IsChecked="{Binding OnlyCurrentSession}"/>
                         <Button Content="Обновить" Command="{Binding RefreshLogsCommand}"/>
+                        <Button Content="Экспорт" Command="{Binding ExportLogsCommand}"/>
                     </StackPanel>
+
+                    <!-- Результат последнего экспорта: путь к файлу или ошибка -->
+                    <TextBlock DockPanel.Dock="Bottom" Classes="tileTitle"
+                               Margin="0,6,0,0" TextWrapping="Wrap"
+                               Text="{Binding ExportStatusText}"/>
+
                     <ListBox ItemsSource="{Binding FilteredLogEvents}"
                              FontFamily="Cascadia Mono,Consolas,monospace" FontSize="12"/>
                 </DockPanel>

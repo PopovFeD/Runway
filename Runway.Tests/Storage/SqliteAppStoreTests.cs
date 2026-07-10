@@ -55,10 +55,14 @@ public class SqliteAppStoreTests : IDisposable
         store.SaveEvent(new EventRecord(DateTime.Now, "Warning", "Parser", "мусор", s2));
 
         Assert.Equal(3, store.ReadEvents(null, null).Count);
-        Assert.Equal(2, store.ReadEvents("Warning", null).Count);
+        Assert.Equal(2, store.ReadEvents(new[] { "Warning" }, null).Count);
+        Assert.Equal(3, store.ReadEvents(new[] { "Info", "Warning" }, null).Count);
         Assert.Equal(2, store.ReadEvents(null, s1).Count);
-        var only = Assert.Single(store.ReadEvents("Warning", s2));
+        var only = Assert.Single(store.ReadEvents(new[] { "Warning" }, s2));
         Assert.Equal("Parser", only.Category);
+
+        // Пустой набор уровней = все галочки сняты = пусто
+        Assert.Empty(store.ReadEvents(Array.Empty<string>(), null));
     }
 
     [Fact]

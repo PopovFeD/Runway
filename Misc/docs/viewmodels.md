@@ -36,8 +36,8 @@ Protocol → Storage/Logging и отдаёт всё это GUI через бин
 `OnDataReceived` (read-поток транспорта!) только режет байты на кадры и кладёт
 в безлимитный `Channel<Frame>`. Консьюмер `ProcessFramesAsync` (отдельная Task):
 разбор (`PacketParser`), запись телеметрии в `IAppStore` с session_id (ошибка
-БД — `StoreError` в лог, конвейер живёт), строка — в файл (`ILogFileWriter`)
-и в GUI (`BoundedLog` + метка времени, через `IUiDispatcher`), там же
+БД — событие Storage/Error через SaveEventQuietly, конвейер живёт), строка —
+в GUI (`BoundedLog` + метка времени, через `IUiDispatcher`), там же
 обновляются плитки Дашборда (LastTemperatureText и т.д.). Никакого I/O в
 read-потоке. Автопрокрутка живого вывода — code-behind MainWindow.axaml.cs.
 
@@ -47,7 +47,7 @@ read-потоке. Автопрокрутка живого вывода — code
 ## Владение
 
 VM подписывается на все транспорты в конструкторе и отписывается в `Dispose`;
-транспортами, логами и хранилищем владеет `App.axaml.cs` (создание и Dispose
+транспортами и хранилищем владеет `App.axaml.cs` (создание и Dispose
 в `desktop.Exit`, порядок важен — см. комментарий там).
 
 ## Тесты

@@ -5,11 +5,9 @@
 
 ## Код
 
-- [ ] Логи → БД, шаги 3–4 из `Misc/docs/storage-and-logs-decision.md`:
-      мост `ILoggerProvider`→`events` (diagnostics-события SerialTransport
-      сами лягут в БД) и упразднение `runway.log`/`LogFileWriter`
-- [ ] Экспорт: CSV первым (`SqliteAppStore.ReadAllTelemetry` готов),
-      Excel — потом
+- [ ] Экспорт: CSV логов сделан (по галочкам вкладки «Логи», в exports/);
+      осталось: экспорт телеметрии, выбор папки диалогом
+      (Avalonia StorageProvider), Excel
 - [ ] Управляющие команды (устройству): `PacketBuilder` готов,
       нужен `MessageType.Command` + отправка в `ITransport` (метод Write
       в интерфейсе отсутствует — добавить) + GUI на вкладке «Команды»
