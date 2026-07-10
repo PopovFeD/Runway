@@ -16,7 +16,6 @@ namespace Runway.ViewModels;
 public class MainWindowViewModel : ViewModelBase, IDisposable
 {
     private readonly FrameReader _frameReader;
-    private readonly ILogFileWriter _logFileWriter;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly BoundedLog _boundedLog;
 
@@ -33,10 +32,9 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     // Хранилище данных приложения; null — работаем без БД (например, в части тестов).
     private readonly IAppStore? _appStore;
 
-    // Текущая сессия подключения (id из IAppStore.BeginSession); 0 — сессии нет.
-    // Пишется из UI-потока (Connect/Disconnect), читается из консьюмера кадров —
-    // поэтому доступ через Volatile.Read/Write, а не голое поле.
-    private long _currentSessionId;
+    // Текущая сессия подключения — общая с StoreLoggerProvider (diagnostics-
+    // события транспорта получают тот же session_id, что и события ViewModel).
+    private readonly SessionTracker _sessions;
 
     // Очередь между read-потоком порта (продюсер) и разбором пакетов (консьюмер).
     // Смысл: OnDataReceived вызывается прямо из фонового потока SerialTransport.ReadLoop,
@@ -59,9 +57,9 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     public MainWindowViewModel(
         FrameReader frameReader,
         IReadOnlyList<ITransport> transports,
-        ILogFileWriter logFileWriter,
         IUiDispatcher uiDispatcher,
         IAppStore? appStore = null,
+        SessionTracker? sessionTracker = null,
         int maxLogEntries = 500,
         string? initialEndpoint = null
     )
@@ -73,9 +71,9 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
         _frameReader = frameReader;
         Transports = transports;
-        _logFileWriter = logFileWriter;
         _uiDispatcher = uiDispatcher;
         _appStore = appStore;
+        _sessions = sessionTracker ?? new SessionTracker();
         _boundedLog = new BoundedLog(LogEntries, maxLogEntries);
 
         // Напрямую в поле, не через свойство: сеттер SelectedTransport дёргает
@@ -117,8 +115,8 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     // источник для второго ComboBox. Обновляется при смене транспорта и по кнопке.
     public ObservableCollection<string> AvailableEndpoints { get; } = new();
 
-    // Сюда GUI смотрит, чтобы показать лог принятых кадров. Ограничена по размеру
-    // через _boundedLog — полный, неограниченный лог всегда есть в файле (LogFileWriter).
+    // Сюда GUI смотрит, чтобы показать живой вывод. Ограничена по размеру через
+    // _boundedLog — история без ограничений лежит в БД (telemetry + events).
     public ObservableCollection<string> LogEntries { get; } = new();
 
     public RelayCommand RefreshEndpointsCommand { get; }
@@ -207,8 +205,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             return;
 
         string? level = SelectedLogLevelFilter == "Все" ? null : SelectedLogLevelFilter;
-        long session = Volatile.Read(ref _currentSessionId);
-        long? sessionFilter = OnlyCurrentSession && session != 0 ? session : null;
+        long? sessionFilter = OnlyCurrentSession ? _sessions.CurrentId : null;
 
         var events = _appStore.ReadEvents(level, sessionFilter);
 
@@ -232,17 +229,10 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         if (_appStore == null)
             return;
 
-        long session = Volatile.Read(ref _currentSessionId);
         try
         {
             _appStore.SaveEvent(
-                new EventRecord(
-                    DateTime.Now,
-                    level,
-                    category,
-                    message,
-                    session == 0 ? null : session
-                )
+                new EventRecord(DateTime.Now, level, category, message, _sessions.CurrentId)
             );
         }
         catch
@@ -340,14 +330,11 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         {
             try
             {
-                Volatile.Write(
-                    ref _currentSessionId,
-                    _appStore.BeginSession(_activeTransport.DisplayName, SelectedEndpoint)
-                );
+                _sessions.Set(_appStore.BeginSession(_activeTransport.DisplayName, SelectedEndpoint));
             }
             catch
             {
-                Volatile.Write(ref _currentSessionId, 0);
+                _sessions.Clear();
             }
         }
         SaveEventQuietly(
@@ -370,8 +357,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
         SaveEventQuietly("Info", "Connection", "Отключение по команде пользователя");
 
-        long session = Volatile.Read(ref _currentSessionId);
-        if (session != 0 && _appStore != null)
+        if (_sessions.CurrentId is long session && _appStore != null)
         {
             try
             {
@@ -381,7 +367,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             {
                 // См. SaveEventQuietly — репортить некуда
             }
-            Volatile.Write(ref _currentSessionId, 0);
+            _sessions.Clear();
         }
 
         // Close() по команде пользователя — штатная остановка, а не разрыв,
@@ -467,7 +453,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                     // ни останавливать конвейер — ловим её отдельно.
                     if (packet is TelemetryPacket telemetry && _appStore != null)
                     {
-                        long session = Volatile.Read(ref _currentSessionId);
                         try
                         {
                             _appStore.SaveTelemetry(
@@ -476,14 +461,18 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                                     frame.Sequence,
                                     telemetry.Temperature,
                                     telemetry.Humidity,
-                                    session == 0 ? null : session
+                                    _sessions.CurrentId
                                 )
                             );
                         }
                         catch (Exception ex)
                         {
-                            _logFileWriter.WriteLine(
-                                $"Seq={frame.Sequence}  StoreError: {ex.Message}"
+                            // Скорее всего и SaveEvent упадёт (та же БД) — тогда
+                            // событие тихо потеряется, но след останется в GUI-строке
+                            SaveEventQuietly(
+                                "Error",
+                                "Storage",
+                                $"Seq={frame.Sequence}: {ex.Message}"
                             );
                         }
                     }
@@ -519,11 +508,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                         $"Seq={frame.Sequence} Type=0x{frame.MessageType:X2}: {ex.Message}"
                     );
                 }
-
-                // Полный лог — на диск, без ограничений по размеру. Мы уже не в
-                // read-потоке порта, так что запись на диск ему не мешает.
-                // (LogFileWriter добавляет свой таймстамп сам — строку не дублируем.)
-                _logFileWriter.WriteLine(line);
 
                 // В GUI — строка в лог-стиле (время, как в терминале VS Code),
                 // с ограничением через BoundedLog, чтобы не тормозить ListBox
@@ -572,7 +556,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
     // Останавливает консьюмера и отписывается от транспортов. Вызывается из App при
     // выходе из приложения (см. App.axaml.cs). Сами транспорты здесь не закрываются —
-    // ими, как и LogFileWriter, владеет тот, кто их создал (App.axaml.cs).
+    // ими, как и хранилищем, владеет тот, кто их создал (App.axaml.cs).
     public void Dispose()
     {
         foreach (var transport in Transports)

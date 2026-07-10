@@ -216,7 +216,6 @@ public class MainWindowViewModelConnectionCommandsTests
         return new MainWindowViewModel(
             new FrameReader(),
             transports,
-            new FakeLogFileWriter(),
             new ImmediateUiDispatcher(),
             initialEndpoint: initialEndpoint
         );

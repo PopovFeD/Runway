@@ -104,7 +104,6 @@ public class MainWindowViewModelConnectionStatusTests
         var vm = new MainWindowViewModel(
             new FrameReader(),
             new[] { transport },
-            new FakeLogFileWriter(),
             new ImmediateUiDispatcher()
         );
 

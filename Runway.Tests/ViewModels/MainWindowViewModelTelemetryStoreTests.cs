@@ -162,7 +162,6 @@ public class MainWindowViewModelTelemetryStoreTests
         return new MainWindowViewModel(
             new FrameReader(),
             new[] { transport },
-            new FakeLogFileWriter(),
             new ImmediateUiDispatcher(),
             store
         );

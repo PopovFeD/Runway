@@ -1,33 +1,30 @@
 # Logging
 
-Два независимых потока логов — это осознанно, у них разные потребители:
+После переезда истории в SQLite (см. `storage-and-logs-decision.md`, все
+4 шага выполнены) картина такая:
 
-| | `runway.log` (данные) | `runway.diagnostics.log` (события) |
-|---|---|---|
-| Что | строки принятой телеметрии | разрыв порта, ретраи, ошибки открытия |
-| Кто пишет | `LogFileWriter : ILogFileWriter` | `Microsoft.Extensions.Logging` → `FileLoggerProvider` |
-| Зачем читать | греп/анализ данных | отладка поведения приложения |
+* **Основной журнал приложения — БД** (таблица `events`): события ViewModel
+  пишутся напрямую (`SaveEventQuietly`), diagnostics-события транспорта —
+  через мост `StoreLoggerProvider : ILoggerProvider` (уровни M.E.L сводятся
+  к Info/Warning/Error, категория укорачивается до имени класса, session_id
+  берётся из общего `SessionTracker`). Читается во вкладке «Логи».
+* **`runway.diagnostics.log` — "лог последней надежды"**: `FileLoggerProvider`
+  остаётся вторым провайдером и дублирует diagnostics-события в файл — на
+  случай, когда БД недоступна (не открылась, диск). Это единственный
+  текстовый лог; `runway.log`/`LogFileWriter` упразднены.
+* `AddConsole()` — дубль diagnostics в терминал при разработке.
 
-Файлы: `Runway/Core/Logging/*` (`AppendOnlyFile`, `LogFileWriter`,
-`FileLoggerProvider`, `BoundedLog`).
+Файлы: `Runway/Core/Logging/*` (`AppendOnlyFile`, `FileLoggerProvider`,
+`StoreLoggerProvider`, `BoundedLog`).
 
-* `AppendOnlyFile` — общая обёртка над `StreamWriter` (создание каталога,
-  `AutoFlush`, `lock` — diagnostics пишется из нескольких потоков).
-* `FileLoggerProvider`/`FileLogger` — минимальный `ILoggerProvider` (~70 строк):
-  уровни + категории + файл, без ротации. Serilog/NLog — сознательно нет:
-  оверинжиниринг для текущих нужд. `AddConsole()` в `App` — дубль diagnostics
-  в терминал при разработке.
-* `BoundedLog` — кап GUI-списка `LogEntries` (`MaxLogEntries`); полный лог
-  всё равно на диске. Отдельный класс ради тестов без Avalonia.
+* `AppendOnlyFile` — обёртка над `StreamWriter` (каталог, `AutoFlush`, `lock`).
+* `BoundedLog` — кап живого вывода GUI (`MaxLogEntries`); история — в БД.
+* Логгеры не имеют права бросать: `StoreLogger` глотает ошибки БД (след
+  останется в файле), Serilog/NLog по-прежнему сознательно не используются.
 * Таймстампы и числа — `InvariantCulture` везде (был реальный баг с русской
   локалью: `24,53` и другой разделитель времени).
 
-Ревизия 2026.07.09 (Claude Code): конструкция проверена на переусложнение —
-вердикт «оставить как есть»: два файла оправданы разными потребителями,
-`AppendOnlyFile` устраняет дублирование, свой провайдер дешевле зависимости.
-Известное будущее: когда SQLite станет основным хранилищем телеметрии,
-`LogFileWriter` — кандидат на удаление (см. TODO).
-
 Готча владения: `LoggerFactory` владеет переданными провайдерами — не
-диспозить `fileLoggerProvider` отдельно и не делать `using var loggerFactory`
-(закрыл бы файл сразу после старта); всё закрывается в `desktop.Exit`.
+диспозить их отдельно и не делать `using var loggerFactory` (закрыл бы файл
+сразу после старта). Порядок в `desktop.Exit`: транспорты → loggerFactory →
+БД последней, чтобы StoreLoggerProvider не писал в закрытое соединение.

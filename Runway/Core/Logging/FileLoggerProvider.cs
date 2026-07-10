@@ -4,11 +4,9 @@ using Microsoft.Extensions.Logging;
 namespace Runway.Logging;
 
 // Минимальный провайдер Microsoft.Extensions.Logging поверх AppendOnlyFile.
-// Без ротации и без сторонних пакетов вроде Serilog/NLog — только то, что реально
-// нужно сейчас: уровни (LogWarning/LogInformation/...) и категория (обычно имя
-// класса через ILogger<T>) для diagnostics-событий вроде переподключения порта.
-// Телеметрийные данные сюда не попадают — для них по-прежнему LogFileWriter,
-// пишущий в отдельный файл (см. AppSettings.LogFilePath vs DiagnosticsLogFilePath).
+// После переезда событий в БД (StoreLoggerProvider) файл выполняет роль
+// "лога последней надежды": сюда события пишутся параллельно с БД и остаются
+// доступными, даже когда сама БД не открылась (см. storage-and-logs-decision.md).
 public sealed class FileLoggerProvider : ILoggerProvider
 {
     private readonly AppendOnlyFile _file;

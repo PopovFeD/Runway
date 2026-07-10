@@ -21,11 +21,9 @@ public class MainWindowViewModelPipelineTests
     public async Task DataReceived_ParsesTelemetryFrame_AndAddsLineToLogEntries()
     {
         var transport = new FakeTransport();
-        var logFileWriter = new FakeLogFileWriter();
         var vm = new MainWindowViewModel(
             new FrameReader(),
             new[] { transport },
-            logFileWriter,
             new ImmediateUiDispatcher()
         );
 
@@ -55,11 +53,9 @@ public class MainWindowViewModelPipelineTests
     public async Task DataReceived_UnknownMessageType_LogsParseError_ButKeepsProcessingNextFrames()
     {
         var transport = new FakeTransport();
-        var logFileWriter = new FakeLogFileWriter();
         var vm = new MainWindowViewModel(
             new FrameReader(),
             new[] { transport },
-            logFileWriter,
             new ImmediateUiDispatcher()
         );
 
@@ -88,39 +84,38 @@ public class MainWindowViewModelPipelineTests
     }
 
     [Fact]
-    public async Task ProcessedLines_AreWrittenToLogFile_EvenAfterBeingEvictedFromLogEntries()
+    public async Task LiveOutput_IsBounded_ButAllTelemetryReachesStore()
     {
         var transport = new FakeTransport();
-        var logFileWriter = new FakeLogFileWriter();
+        var store = new FakeAppStore();
 
-        // Намеренно маленькая ёмкость GUI-лога — 2 записи. Проверяем, что в файл
-        // (FakeLogFileWriter) уходят ВСЕ строки, а не только последние две.
+        // Намеренно маленькая ёмкость живого вывода — 2 записи. Проверяем, что
+        // в хранилище (историю) уходят ВСЕ кадры телеметрии, а GUI держит кап.
         var vm = new MainWindowViewModel(
             new FrameReader(),
             new[] { transport },
-            logFileWriter,
             new ImmediateUiDispatcher(),
+            store,
             maxLogEntries: 2
         );
 
+        // Тот же payload, что в PacketParserTests: T=24.53°C, H=51.28%
+        byte[] payload = { 0x95, 0x09, 0x08, 0x14 };
         const int frameCount = 5;
         for (ushort seq = 0; seq < frameCount; seq++)
         {
             byte[] frame = FrameTestHelper.BuildFrameBytes(
                 version: 1,
-                messageType: (byte)MessageType.Ping,
+                messageType: (byte)MessageType.Telemetry,
                 sequence: seq,
-                payload: Array.Empty<byte>()
+                payload: payload
             );
             transport.RaiseDataReceived(frame);
         }
 
-        await WaitUntilAsync(
-            () => logFileWriter.Lines.Count >= frameCount,
-            TimeSpan.FromSeconds(2)
-        );
+        await WaitUntilAsync(() => store.Records.Count >= frameCount, TimeSpan.FromSeconds(2));
 
-        Assert.Equal(frameCount, logFileWriter.Lines.Count);
+        Assert.Equal(frameCount, store.Records.Count);
         Assert.True(vm.LogEntries.Count <= 2);
 
         vm.Dispose();
@@ -130,11 +125,9 @@ public class MainWindowViewModelPipelineTests
     public void Dispose_UnsubscribesFromTransport_SoLateEventsAreIgnored()
     {
         var transport = new FakeTransport();
-        var logFileWriter = new FakeLogFileWriter();
         var vm = new MainWindowViewModel(
             new FrameReader(),
             new[] { transport },
-            logFileWriter,
             new ImmediateUiDispatcher()
         );
 

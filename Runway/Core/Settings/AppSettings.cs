@@ -9,18 +9,12 @@ public class AppSettings
 
     public int BaudRate { get; set; } = 115200;
 
-    // Путь к файлу полного лога (относительно каталога сборки — см. AvaloniaUiDispatcher
-    // и App.axaml.cs, где путь комбинируется с AppContext.BaseDirectory, чтобы не
-    // повторить баг с относительным путём settings.json из code-review 2026.07.08).
-    public string LogFilePath { get; set; } = "runway.log";
-
-    // Сколько последних строк держать в GUI (LogEntries). Полный лог всегда пишется
-    // в LogFilePath целиком — ограничение касается только памяти процесса.
+    // Сколько последних строк держать в живом выводе GUI (LogEntries) —
+    // ограничение касается только памяти процесса, история лежит в БД.
     public int MaxLogEntries { get; set; } = 500;
 
-    // Путь к файлу diagnostics-лога (Microsoft.Extensions.Logging, см. FileLoggerProvider).
-    // Отдельно от LogFilePath: там данные телеметрии, тут — события уровня приложения
-    // (разрыв порта, попытки переподключения), их принципиально не стоит мешать в одном файле.
+    // Путь к файлу diagnostics-лога — "лог последней надежды": основной поток
+    // событий идёт в БД (StoreLoggerProvider), файл нужен на случай её недоступности.
     public string DiagnosticsLogFilePath { get; set; } = "runway.diagnostics.log";
 
     // Пауза перед очередной попыткой переподключиться после разрыва порта.

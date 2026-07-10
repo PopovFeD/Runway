@@ -31,24 +31,27 @@ public partial class App : Application
             // Path.Combine с AppContext.BaseDirectory — чтобы файлы не "терялись"
             // в зависимости от того, откуда запущен процесс (тот же класс проблемы,
             // что уже отмечен для settings.json в Misc/diary/2026.07.08-code-review.md).
-            var logFilePath = Path.Combine(AppContext.BaseDirectory, settings.LogFilePath);
             var diagnosticsLogPath = Path.Combine(
                 AppContext.BaseDirectory,
                 settings.DiagnosticsLogFilePath
             );
 
-            var logFileWriter = new LogFileWriter(logFilePath);
+            // БД создаётся до логгеров: StoreLoggerProvider пишет события в неё
+            var appStore = new SqliteAppStore(
+                Path.Combine(AppContext.BaseDirectory, settings.DatabaseFilePath)
+            );
+            var sessionTracker = new SessionTracker();
+
             var fileLoggerProvider = new FileLoggerProvider(diagnosticsLogPath);
 
-            // Console — чтобы видеть diagnostics-события прямо в терминале при разработке.
-            // Файловый провайдер — чтобы они же оставались на диске после закрытия окна.
-            // Важно: НЕ "using var" — OnFrameworkInitializationCompleted возвращается
-            // сразу после настройки, задолго до реального выхода из приложения. Если бы
-            // loggerFactory тут же диспозился по выходу из метода, он утянул бы за собой
-            // (LoggerFactory владеет добавленными провайдерами) и fileLoggerProvider —
-            // diagnostics-файл закрылся бы прежде, чем успел бы принять хоть одну запись.
+            // Три получателя diagnostics-событий: БД (основной, фильтруемый в GUI),
+            // файл ("лог последней надежды" на случай недоступной БД), консоль
+            // (при разработке). Важно: НЕ "using var" — OnFrameworkInitializationCompleted
+            // возвращается сразу после настройки, задолго до реального выхода из
+            // приложения; LoggerFactory владеет добавленными провайдерами.
             var loggerFactory = LoggerFactory.Create(builder =>
             {
+                builder.AddProvider(new StoreLoggerProvider(appStore, sessionTracker));
                 builder.AddProvider(fileLoggerProvider);
                 builder.AddConsole();
             });
@@ -73,27 +76,20 @@ public partial class App : Application
             // Конструктор ViewModel уже подписывается на события всех транспортов.
             // Автоподключения при старте больше нет — порт выбирается в GUI,
             // PortName из настроек лишь предвыбирается в списке, если он есть.
-            var appStore = new SqliteAppStore(
-                Path.Combine(AppContext.BaseDirectory, settings.DatabaseFilePath)
-            );
-
             var mainViewModel = new MainWindowViewModel(
                 frameReader,
                 transports,
-                logFileWriter,
                 uiDispatcher,
                 appStore,
+                sessionTracker,
                 settings.MaxLogEntries,
                 initialEndpoint: settings.PortName
             );
 
-            // Порядок важен: сначала останавливаем консьюмера очереди кадров
-            // (см. MainWindowViewModel.Dispose), потом транспорты (иначе они могут
-            // успеть дёрнуть уже отписанный OnDataReceived), и только в конце —
-            // закрываем файлы логов, чтобы в них не полетела запись в уже
-            // закрытый StreamWriter. loggerFactory.Dispose() сам закроет
-            // fileLoggerProvider — он ей передан через AddProvider, отдельно
-            // диспозить его не нужно.
+            // Порядок важен: консьюмер кадров → транспорты (они ещё могут писать
+            // в логи при закрытии) → фабрика логгеров (закроет fileLoggerProvider
+            // и StoreLoggerProvider) → в самом конце БД, чтобы StoreLoggerProvider
+            // не писал в уже закрытое соединение.
             desktop.Exit += (_, _) =>
             {
                 mainViewModel.Dispose();
@@ -101,9 +97,8 @@ public partial class App : Application
                 {
                     transport.Close();
                 }
-                appStore.Dispose();
-                logFileWriter.Dispose();
                 loggerFactory.Dispose();
+                appStore.Dispose();
             };
 
             desktop.MainWindow = new MainWindow { DataContext = mainViewModel };

@@ -2,9 +2,8 @@ namespace Runway.Logging;
 
 // Общая обёртка над StreamWriter для append-only файлов: создаёт директорию,
 // пишет с AutoFlush (чтобы при аварийном завершении процесса на диске оставалось
-// всё, что успело прийти). Используется и телеметрийным логом (LogFileWriter),
-// и диагностическим (FileLoggerProvider/FileLogger) — чтобы не дублировать одну
-// и ту же возню с StreamWriter в двух местах.
+// всё, что успело прийти). Используется diagnostics-логом
+// (FileLoggerProvider/FileLogger) — "логом последней надежды" при недоступной БД.
 public sealed class AppendOnlyFile : IDisposable
 {
     private readonly StreamWriter _writer;
