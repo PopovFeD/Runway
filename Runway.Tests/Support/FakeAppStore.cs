@@ -9,6 +9,7 @@ public class FakeAppStore : IAppStore
     private long _nextSessionId = 1;
 
     public List<TelemetryRecord> Records { get; } = new();
+    public List<EnvironmentRecord> EnvRecords { get; } = new();
     public List<EventRecord> Events { get; } = new();
     public List<(long Id, string Transport, string Endpoint)> StartedSessions { get; } = new();
     public List<long> EndedSessions { get; } = new();
@@ -49,6 +50,13 @@ public class FakeAppStore : IAppStore
         Records.Where(r => sessionId == null || r.SessionId == sessionId).ToList();
 
     public long CountTelemetry() => Records.Count;
+
+    public void SaveEnvironment(EnvironmentRecord record) => EnvRecords.Add(record);
+
+    public IReadOnlyList<EnvironmentRecord> ReadEnvironment(long? sessionId) =>
+        EnvRecords.Where(r => sessionId == null || r.SessionId == sessionId).ToList();
+
+    public long CountEnvironment() => EnvRecords.Count;
 
     public void Dispose() { }
 }

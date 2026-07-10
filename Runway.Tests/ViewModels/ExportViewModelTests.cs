@@ -19,6 +19,7 @@ public class ExportViewModelTests : IDisposable
         var store = new FakeAppStore();
         store.Records.Add(new TelemetryRecord(DateTime.Now, 1, 24.53, 51.28, SessionId: 1));
         store.Records.Add(new TelemetryRecord(DateTime.Now, 2, 25.00, 50.00, SessionId: 2));
+        store.EnvRecords.Add(new EnvironmentRecord(DateTime.Now, 3, 1013.25, 347.5, SessionId: 2));
         return store;
     }
 
@@ -29,13 +30,35 @@ public class ExportViewModelTests : IDisposable
 
         vm.ExportAllCommand.Execute(null);
 
-        string path = Assert.Single(Directory.GetFiles(_exportDir, "*.csv"));
-        string[] lines = File.ReadAllLines(path);
+        // CSV одно-табличный: по файлу на каждый выбранный протокол
+        string[] files = Directory.GetFiles(_exportDir, "*.csv");
+        Assert.Equal(2, files.Length);
+
+        string telemetryPath = Assert.Single(files, f => f.Contains("telemetry"));
+        string[] lines = File.ReadAllLines(telemetryPath);
         Assert.Equal("timestamp;sequence;temperature;humidity;session_id", lines[0]);
         Assert.Equal(3, lines.Length); // заголовок + 2 записи
         Assert.Contains(";24.53;", lines[1]);
-        Assert.StartsWith("Экспортировано 2 записей", vm.StatusText);
-        Assert.Equal("Всего в БД: 2 записей", vm.TotalRecordsText);
+
+        string envPath = Assert.Single(files, f => f.Contains("environment"));
+        Assert.Contains(";1013.25;", File.ReadAllLines(envPath)[1]);
+
+        Assert.StartsWith("Экспортировано 3 записей", vm.StatusText);
+        Assert.Equal("Всего в БД: Telemetry — 2, Environment — 1", vm.TotalRecordsText);
+    }
+
+    [Fact]
+    public void Export_WithNoProtocolsSelected_Complains()
+    {
+        var vm = new ExportViewModel(StoreWithRecords(), new SessionTracker(), _exportDir)
+        {
+            IncludeTelemetry = false,
+            IncludeEnvironment = false,
+        };
+
+        vm.ExportAllCommand.Execute(null);
+
+        Assert.Equal("Не выбран ни один протокол.", vm.StatusText);
     }
 
     [Fact]
@@ -49,6 +72,7 @@ public class ExportViewModelTests : IDisposable
         Assert.Empty(Directory.Exists(_exportDir) ? Directory.GetFiles(_exportDir) : Array.Empty<string>());
 
         sessions.Set(2);
+        vm.IncludeEnvironment = false; // только телеметрия, чтобы был один файл
         vm.ExportSessionCommand.Execute(null);
 
         string path = Assert.Single(Directory.GetFiles(_exportDir, "*.csv"));
@@ -77,6 +101,12 @@ public class ExportViewModelTests : IDisposable
         string xml = reader.ReadToEnd();
         Assert.Contains("<v>24.53</v>", xml);
         Assert.Contains("<t>temperature</t>", xml);
+
+        // Второй протокол — второй лист той же книги
+        var sheet2 = zip.GetEntry("xl/worksheets/sheet2.xml");
+        Assert.NotNull(sheet2);
+        using var reader2 = new StreamReader(sheet2!.Open());
+        Assert.Contains("<v>1013.25</v>", reader2.ReadToEnd());
     }
 
     public void Dispose()

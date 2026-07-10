@@ -4,9 +4,10 @@ using Runway.Storage;
 
 namespace Runway.ViewModels;
 
-// Вкладка "Экспорт" (по GUI-макету): формат CSV/XLSX и две кнопки —
-// «все записи» и «эта сессия». Экспортируется телеметрия из БД
-// (экспорт ЛОГОВ живёт во вкладке "Логи" и идёт по её галочкам).
+// Вкладка "Экспорт" (по GUI-макету): формат CSV/XLSX, галочки протоколов и
+// две кнопки — «все записи» и «эта сессия». Каждый выбранный протокол — своя
+// таблица: в XLSX — отдельный лист одной книги, в CSV — отдельный файл
+// (CSV по своей природе одно-табличный). Экспорт ЛОГОВ живёт во вкладке "Логи".
 public class ExportViewModel : ViewModelBase
 {
     public const string FormatCsv = "CSV";
@@ -38,11 +39,25 @@ public class ExportViewModel : ViewModelBase
         set => SetProperty(ref _selectedFormat, value);
     }
 
+    // Галочки протоколов: что выбрано — то и экспортируется. Новый тип
+    // пакета в протоколе = новая галочка + ветка в BuildTables.
+    private bool _includeTelemetry = true;
+    public bool IncludeTelemetry
+    {
+        get => _includeTelemetry;
+        set => SetProperty(ref _includeTelemetry, value);
+    }
+
+    private bool _includeEnvironment = true;
+    public bool IncludeEnvironment
+    {
+        get => _includeEnvironment;
+        set => SetProperty(ref _includeEnvironment, value);
+    }
+
     public RelayCommand ExportAllCommand { get; }
     public RelayCommand ExportSessionCommand { get; }
 
-    // "Всего в БД: N записей" — как в макете. Обновляется при создании
-    // и после каждого экспорта (живой счётчик здесь не нужен).
     private string _totalRecordsText = "";
     public string TotalRecordsText
     {
@@ -61,8 +76,10 @@ public class ExportViewModel : ViewModelBase
     {
         try
         {
-            long count = _appStore?.CountTelemetry() ?? 0;
-            TotalRecordsText = $"Всего в БД: {count} записей";
+            long telemetry = _appStore?.CountTelemetry() ?? 0;
+            long environment = _appStore?.CountEnvironment() ?? 0;
+            TotalRecordsText =
+                $"Всего в БД: Telemetry — {telemetry}, Environment — {environment}";
         }
         catch (Exception ex)
         {
@@ -80,30 +97,107 @@ public class ExportViewModel : ViewModelBase
         Export(session);
     }
 
+    private List<ExportTable> BuildTables(long? sessionId)
+    {
+        var tables = new List<ExportTable>();
+        if (_appStore == null)
+            return tables;
+
+        if (IncludeTelemetry)
+        {
+            var rows = _appStore
+                .ReadTelemetry(sessionId)
+                .Select(r =>
+                    (IReadOnlyList<object?>)
+                        new object?[]
+                        {
+                            r.Timestamp,
+                            r.Sequence,
+                            r.Temperature,
+                            r.Humidity,
+                            r.SessionId,
+                        }
+                )
+                .ToList();
+            tables.Add(
+                new ExportTable(
+                    "Telemetry",
+                    new[] { "timestamp", "sequence", "temperature", "humidity", "session_id" },
+                    rows
+                )
+            );
+        }
+
+        if (IncludeEnvironment)
+        {
+            var rows = _appStore
+                .ReadEnvironment(sessionId)
+                .Select(r =>
+                    (IReadOnlyList<object?>)
+                        new object?[]
+                        {
+                            r.Timestamp,
+                            r.Sequence,
+                            r.PressureHpa,
+                            r.LightLux,
+                            r.SessionId,
+                        }
+                )
+                .ToList();
+            tables.Add(
+                new ExportTable(
+                    "Environment",
+                    new[] { "timestamp", "sequence", "pressure_hpa", "light_lux", "session_id" },
+                    rows
+                )
+            );
+        }
+
+        return tables;
+    }
+
     private void Export(long? sessionId)
     {
         try
         {
-            var records = _appStore?.ReadTelemetry(sessionId) ?? Array.Empty<TelemetryRecord>();
+            var tables = BuildTables(sessionId);
+            if (tables.Count == 0)
+            {
+                StatusText = "Не выбран ни один протокол.";
+                return;
+            }
 
             Directory.CreateDirectory(_exportDirectory);
             string scope = sessionId is long id ? $"session{id}" : "all";
-            string extension = SelectedFormat == FormatXlsx ? "xlsx" : "csv";
-            string path = Path.Combine(
-                _exportDirectory,
-                $"runway-telemetry-{scope}-{DateTime.Now:yyyyMMdd-HHmmss}.{extension}"
-            );
+            string stamp = $"{DateTime.Now:yyyyMMdd-HHmmss}";
+            int totalRows = tables.Sum(t => t.Rows.Count);
 
+            var paths = new List<string>();
             if (SelectedFormat == FormatXlsx)
             {
-                TelemetryXlsxWriter.Write(path, records);
+                // Один файл, лист на протокол
+                string path = Path.Combine(
+                    _exportDirectory,
+                    $"runway-{scope}-{stamp}.xlsx"
+                );
+                XlsxTableWriter.Write(path, tables);
+                paths.Add(path);
             }
             else
             {
-                TelemetryCsvWriter.Write(path, records);
+                // CSV одно-табличный — файл на протокол
+                foreach (var table in tables)
+                {
+                    string path = Path.Combine(
+                        _exportDirectory,
+                        $"runway-{table.Name.ToLowerInvariant()}-{scope}-{stamp}.csv"
+                    );
+                    CsvTableWriter.Write(path, table);
+                    paths.Add(path);
+                }
             }
 
-            StatusText = $"Экспортировано {records.Count} записей: {path}";
+            StatusText = $"Экспортировано {totalRows} записей: {string.Join("; ", paths)}";
         }
         catch (Exception ex)
         {

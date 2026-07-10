@@ -44,6 +44,15 @@ public sealed class SqliteAppStore : IAppStore
                 humidity    REAL    NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS environment (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp  TEXT    NOT NULL,
+                sequence   INTEGER NOT NULL,
+                pressure   REAL    NOT NULL,
+                light      REAL    NOT NULL,
+                session_id INTEGER NULL
+            );
+
             CREATE TABLE IF NOT EXISTS events (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp  TEXT    NOT NULL,
@@ -236,6 +245,69 @@ public sealed class SqliteAppStore : IAppStore
             }
 
             return records;
+        }
+    }
+
+    public void SaveEnvironment(EnvironmentRecord record)
+    {
+        lock (_lock)
+        {
+            using var command = _connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO environment (timestamp, sequence, pressure, light, session_id)
+                VALUES ($timestamp, $sequence, $pressure, $light, $sessionId);
+                """;
+            command.Parameters.AddWithValue("$timestamp", FormatTimestamp(record.Timestamp));
+            command.Parameters.AddWithValue("$sequence", record.Sequence);
+            command.Parameters.AddWithValue("$pressure", record.PressureHpa);
+            command.Parameters.AddWithValue("$light", record.LightLux);
+            command.Parameters.AddWithValue(
+                "$sessionId",
+                (object?)record.SessionId ?? DBNull.Value
+            );
+            command.ExecuteNonQuery();
+        }
+    }
+
+    public IReadOnlyList<EnvironmentRecord> ReadEnvironment(long? sessionId)
+    {
+        lock (_lock)
+        {
+            using var command = _connection.CreateCommand();
+            command.CommandText = """
+                SELECT timestamp, sequence, pressure, light, session_id
+                FROM environment
+                WHERE ($sessionId IS NULL OR session_id = $sessionId)
+                ORDER BY id;
+                """;
+            command.Parameters.AddWithValue("$sessionId", (object?)sessionId ?? DBNull.Value);
+
+            var records = new List<EnvironmentRecord>();
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                records.Add(
+                    new EnvironmentRecord(
+                        ParseTimestamp(reader.GetString(0)),
+                        (ushort)reader.GetInt32(1),
+                        reader.GetDouble(2),
+                        reader.GetDouble(3),
+                        reader.IsDBNull(4) ? null : reader.GetInt64(4)
+                    )
+                );
+            }
+
+            return records;
+        }
+    }
+
+    public long CountEnvironment()
+    {
+        lock (_lock)
+        {
+            using var command = _connection.CreateCommand();
+            command.CommandText = "SELECT COUNT(*) FROM environment;";
+            return (long)command.ExecuteScalar()!;
         }
     }
 

@@ -154,21 +154,38 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                 {
                     packet = PacketParser.Parse(frame);
 
-                    // Телеметрия — в БД; ошибка записи не маскируется под
-                    // ParseError и не останавливает конвейер
-                    if (packet is TelemetryPacket telemetry && _appStore != null)
+                    // Сенсорные данные — в БД (каждый протокол в свою таблицу);
+                    // ошибка записи не маскируется под ParseError и не
+                    // останавливает конвейер
+                    if (_appStore != null)
                     {
                         try
                         {
-                            _appStore.SaveTelemetry(
-                                new TelemetryRecord(
-                                    DateTime.Now,
-                                    frame.Sequence,
-                                    telemetry.Temperature,
-                                    telemetry.Humidity,
-                                    _sessions.CurrentId
-                                )
-                            );
+                            switch (packet)
+                            {
+                                case TelemetryPacket t:
+                                    _appStore.SaveTelemetry(
+                                        new TelemetryRecord(
+                                            DateTime.Now,
+                                            frame.Sequence,
+                                            t.Temperature,
+                                            t.Humidity,
+                                            _sessions.CurrentId
+                                        )
+                                    );
+                                    break;
+                                case EnvironmentPacket e:
+                                    _appStore.SaveEnvironment(
+                                        new EnvironmentRecord(
+                                            DateTime.Now,
+                                            frame.Sequence,
+                                            e.PressureHpa,
+                                            e.LightLux,
+                                            _sessions.CurrentId
+                                        )
+                                    );
+                                    break;
+                            }
                         }
                         catch (Exception ex)
                         {

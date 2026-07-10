@@ -11,6 +11,15 @@ public record TelemetryRecord(
     long? SessionId = null
 );
 
+// Точка данных окружения (MessageType.Environment): давление и освещённость.
+public record EnvironmentRecord(
+    DateTime Timestamp,
+    ushort Sequence,
+    double PressureHpa,
+    double LightLux,
+    long? SessionId = null
+);
+
 // Событие уровня приложения (подключение, разрыв, ошибка разбора...) —
 // то, что раньше жило только строками в diagnostics-логе, а теперь
 // структурировано и фильтруемо (уровень/категория/сессия).
@@ -40,9 +49,13 @@ public interface IAppStore : IDisposable
     // и вкладкой "Логи", и экспортом — что видишь, то и экспортируешь.
     IReadOnlyList<EventRecord> ReadEvents(IReadOnlyCollection<string>? levels, long? sessionId);
 
-    // Телеметрия для экспорта/истории: sessionId == null — вся, иначе — одной сессии
+    // Данные для экспорта/истории: sessionId == null — все, иначе — одной сессии
     IReadOnlyList<TelemetryRecord> ReadTelemetry(long? sessionId);
+    IReadOnlyList<EnvironmentRecord> ReadEnvironment(long? sessionId);
 
-    // Сколько всего точек телеметрии в БД (счётчик "всего N записей" в GUI)
+    void SaveEnvironment(EnvironmentRecord record);
+
+    // Счётчики "всего N записей" для GUI
     long CountTelemetry();
+    long CountEnvironment();
 }
