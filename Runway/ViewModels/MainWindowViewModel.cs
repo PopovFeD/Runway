@@ -59,6 +59,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             initialEndpoint
         );
         Logs = new LogsViewModel(appStore, _sessions, exportDirectory);
+        Export = new ExportViewModel(appStore, _sessions, exportDirectory);
 
         // Поток ДАННЫХ подписан здесь (конвейер живёт в этой VM);
         // состоянием подключения занимается Connection.
@@ -72,6 +73,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
     public ConnectionViewModel Connection { get; }
     public LogsViewModel Logs { get; }
+    public ExportViewModel Export { get; }
 
     // Живой вывод для Дашборда. Ограничен через _boundedLog — история в БД.
     public ObservableCollection<string> LogEntries { get; } = new();

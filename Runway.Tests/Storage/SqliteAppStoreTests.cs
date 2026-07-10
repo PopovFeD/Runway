@@ -37,7 +37,7 @@ public class SqliteAppStoreTests : IDisposable
 
         // Отдельное открытие того же файла — данные реально на диске
         using var reopened = new SqliteAppStore(_dbPath);
-        Assert.Equal(new[] { first, second }, reopened.ReadAllTelemetry());
+        Assert.Equal(new[] { first, second }, reopened.ReadTelemetry(null));
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public class SqliteAppStoreTests : IDisposable
         // EXISTS + миграция session_id) — старые записи переживают перезапуск
         using (var store = new SqliteAppStore(_dbPath))
         {
-            Assert.Single(store.ReadAllTelemetry());
+            Assert.Single(store.ReadTelemetry(null));
         }
     }
 

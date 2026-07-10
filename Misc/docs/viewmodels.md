@@ -3,8 +3,11 @@
 Разделены по вкладкам (закрыт пункт TODO): `MainWindowViewModel` — корень,
 в нём КОНВЕЙЕР ДАННЫХ и Дашборд (живой вывод + плитки), плюс композиция
 дочерних: `Connection` (`ConnectionViewModel` — транспорты, точки, статус,
-кнопка вкл/выкл, сессии) и `Logs` (`LogsViewModel` — галочки-фильтры,
-чтение событий, CSV-экспорт). GUI биндится через префиксы
+кнопка вкл/выкл, сессии), `Logs` (`LogsViewModel` — галочки-фильтры,
+чтение событий, CSV-экспорт логов) и `Export` (`ExportViewModel` — экспорт
+ТЕЛЕМЕТРИИ по макету: формат CSV/XLSX, «все записи»/«эта сессия», счётчик
+«Всего в БД»; писатели в `Core/Export`, XLSX — минимальный OpenXML через
+ZipArchive без сторонних пакетов). GUI биндится через префиксы
 (`Connection.StatusText`, `Logs.ShowInfo`, ...). `ViewLocator` +
 `ViewModelBase` — стандартный каркас Avalonia (CommunityToolkit.Mvvm).
 

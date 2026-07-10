@@ -45,5 +45,10 @@ public class FakeAppStore : IAppStore
             .Where(e => sessionId == null || e.SessionId == sessionId)
             .ToList();
 
+    public IReadOnlyList<TelemetryRecord> ReadTelemetry(long? sessionId) =>
+        Records.Where(r => sessionId == null || r.SessionId == sessionId).ToList();
+
+    public long CountTelemetry() => Records.Count;
+
     public void Dispose() { }
 }

@@ -39,4 +39,10 @@ public interface IAppStore : IDisposable
     // sessionId == null — все сессии. Ровно эта же выборка используется
     // и вкладкой "Логи", и экспортом — что видишь, то и экспортируешь.
     IReadOnlyList<EventRecord> ReadEvents(IReadOnlyCollection<string>? levels, long? sessionId);
+
+    // Телеметрия для экспорта/истории: sessionId == null — вся, иначе — одной сессии
+    IReadOnlyList<TelemetryRecord> ReadTelemetry(long? sessionId);
+
+    // Сколько всего точек телеметрии в БД (счётчик "всего N записей" в GUI)
+    long CountTelemetry();
 }

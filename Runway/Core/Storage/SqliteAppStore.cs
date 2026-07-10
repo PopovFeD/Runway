@@ -207,9 +207,7 @@ public sealed class SqliteAppStore : IAppStore
         }
     }
 
-    // Пока используется только тестами (roundtrip); войдёт в IAppStore,
-    // когда появится экспорт/просмотр истории телеметрии.
-    public IReadOnlyList<TelemetryRecord> ReadAllTelemetry()
+    public IReadOnlyList<TelemetryRecord> ReadTelemetry(long? sessionId)
     {
         lock (_lock)
         {
@@ -217,8 +215,10 @@ public sealed class SqliteAppStore : IAppStore
             command.CommandText = """
                 SELECT timestamp, sequence, temperature, humidity, session_id
                 FROM telemetry
+                WHERE ($sessionId IS NULL OR session_id = $sessionId)
                 ORDER BY id;
                 """;
+            command.Parameters.AddWithValue("$sessionId", (object?)sessionId ?? DBNull.Value);
 
             var records = new List<TelemetryRecord>();
             using var reader = command.ExecuteReader();
@@ -236,6 +236,16 @@ public sealed class SqliteAppStore : IAppStore
             }
 
             return records;
+        }
+    }
+
+    public long CountTelemetry()
+    {
+        lock (_lock)
+        {
+            using var command = _connection.CreateCommand();
+            command.CommandText = "SELECT COUNT(*) FROM telemetry;";
+            return (long)command.ExecuteScalar()!;
         }
     }
 
