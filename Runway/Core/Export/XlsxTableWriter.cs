@@ -123,7 +123,11 @@ public static class XlsxTableWriter
         $"<c t=\"inlineStr\"><is><t>{Escape(value)}</t></is></c>";
 
     private static string Escape(string value) =>
-        value.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;");
+        value
+            .Replace("&", "&amp;")
+            .Replace("<", "&lt;")
+            .Replace(">", "&gt;")
+            .Replace("\"", "&quot;");
 
     private static void AddEntry(ZipArchive zip, string name, string content)
     {
