@@ -135,7 +135,7 @@ public class MainWindowViewModelTelemetryStoreTests
     }
 
     [Fact]
-    public void ExportLogs_WritesCsv_UsingSameCheckboxFilters()
+    public void ExportLogs_WritesPlainLogFile_UsingSameCheckboxFilters()
     {
         string exportDir = Path.Combine(
             Path.GetTempPath(),
@@ -165,12 +165,13 @@ public class MainWindowViewModelTelemetryStoreTests
 
             Assert.StartsWith("Экспортировано 1 записей", vm.Logs.ExportStatusText);
 
-            string csvPath = Assert.Single(Directory.GetFiles(exportDir, "*.csv"));
-            string[] lines = File.ReadAllLines(csvPath);
-            Assert.Equal("timestamp;level;category;message;session_id", lines[0]);
-            Assert.Equal(2, lines.Length); // заголовок + одна запись
-            Assert.Contains(";Warning;", lines[1]);
-            Assert.Contains("Reconnecting", lines[1]);
+            // Логи экспортируются плоским .log, не таблицей
+            string logPath = Assert.Single(Directory.GetFiles(exportDir, "*.log"));
+            string[] lines = File.ReadAllLines(logPath);
+            var line = Assert.Single(lines);
+            Assert.Contains("[Warning]", line);
+            Assert.Contains("Reconnecting", line);
+            Assert.Contains("(session=1)", line);
 
             vm.Dispose();
         }

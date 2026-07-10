@@ -42,17 +42,18 @@ public partial class App : Application
             );
             var sessionTracker = new SessionTracker();
 
-            var fileLoggerProvider = new FileLoggerProvider(diagnosticsLogPath);
-
-            // Три получателя diagnostics-событий: БД (основной, фильтруемый в GUI),
-            // файл ("лог последней надежды" на случай недоступной БД), консоль
-            // (при разработке). Важно: НЕ "using var" — OnFrameworkInitializationCompleted
-            // возвращается сразу после настройки, задолго до реального выхода из
-            // приложения; LoggerFactory владеет добавленными провайдерами.
+            // Получатели diagnostics-событий: БД (основной, фильтруемый в GUI),
+            // файл ("лог последней надежды" на случай повреждённой/недоступной БД —
+            // выключается настройкой DiagnosticsFileEnabled), консоль (при
+            // разработке). Важно: НЕ "using var" — LoggerFactory владеет
+            // добавленными провайдерами и закрывается в desktop.Exit.
             var loggerFactory = LoggerFactory.Create(builder =>
             {
                 builder.AddProvider(new StoreLoggerProvider(appStore, sessionTracker));
-                builder.AddProvider(fileLoggerProvider);
+                if (settings.DiagnosticsFileEnabled)
+                {
+                    builder.AddProvider(new FileLoggerProvider(diagnosticsLogPath));
+                }
                 builder.AddConsole();
             });
 

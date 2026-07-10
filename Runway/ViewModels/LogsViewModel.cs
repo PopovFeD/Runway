@@ -6,7 +6,7 @@ using Runway.Storage;
 namespace Runway.ViewModels;
 
 // Вкладка "Логи": галочки-фильтры по типам сообщений, чтение событий из БД
-// и CSV-экспорт по тем же фильтрам. Выделен из MainWindowViewModel при
+// и .log-экспорт по тем же фильтрам. Выделен из MainWindowViewModel при
 // разделении по вкладкам.
 public class LogsViewModel : ViewModelBase
 {
@@ -115,21 +115,21 @@ public class LogsViewModel : ViewModelBase
             Directory.CreateDirectory(_exportDirectory);
             string path = Path.Combine(
                 _exportDirectory,
-                $"runway-logs-{DateTime.Now:yyyyMMdd-HHmmss}.csv"
+                $"runway-logs-{DateTime.Now:yyyyMMdd-HHmmss}.log"
             );
 
-            // CSV с ';' — его сразу понимает русскоязычный Excel
+            // Логи — это лог: плоские строки .log (как в терминалах и
+            // diagnostics-файле), а не таблица. Табличный экспорт — удел
+            // телеметрии во вкладке "Экспорт".
             var sb = new System.Text.StringBuilder();
-            sb.AppendLine("timestamp;level;category;message;session_id");
             foreach (var e in events)
             {
-                sb.Append(e.Timestamp.ToString("O", CultureInfo.InvariantCulture));
-                sb.Append(';').Append(e.Level);
-                sb.Append(';').Append(CsvField(e.Category));
-                sb.Append(';').Append(CsvField(e.Message));
-                sb.Append(';')
-                    .Append(e.SessionId?.ToString(CultureInfo.InvariantCulture) ?? "");
-                sb.AppendLine();
+                sb.AppendLine(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{e.Timestamp:yyyy-MM-dd HH:mm:ss.fff}  [{e.Level}]  {e.Category}  {e.Message}  (session={e.SessionId?.ToString(CultureInfo.InvariantCulture) ?? "-"})"
+                    )
+                );
             }
 
             File.WriteAllText(path, sb.ToString());
@@ -139,16 +139,5 @@ public class LogsViewModel : ViewModelBase
         {
             ExportStatusText = $"Ошибка экспорта: {ex.Message}";
         }
-    }
-
-    // Минимальное CSV-экранирование: кавычим поле, если внутри разделитель,
-    // кавычки или перенос строки; кавычки удваиваются по правилам CSV.
-    private static string CsvField(string value)
-    {
-        if (value.Contains(';') || value.Contains('"') || value.Contains('\n'))
-        {
-            return $"\"{value.Replace("\"", "\"\"")}\"";
-        }
-        return value;
     }
 }

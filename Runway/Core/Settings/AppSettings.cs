@@ -17,6 +17,12 @@ public class AppSettings
     // событий идёт в БД (StoreLoggerProvider), файл нужен на случай её недоступности.
     public string DiagnosticsLogFilePath { get; set; } = "runway.diagnostics.log";
 
+    // Писать ли diagnostics-файл вообще. Компромисс двух мнений: с переездом
+    // логов в БД файл почти бесполезен, НО SQLite может быть повреждён — файл
+    // остаётся "логом последней надежды". По умолчанию включён; кому не нужен —
+    // выключает здесь.
+    public bool DiagnosticsFileEnabled { get; set; } = true;
+
     // Пауза перед очередной попыткой переподключиться после разрыва порта.
     public int ReconnectDelaySeconds { get; set; } = 2;
 
