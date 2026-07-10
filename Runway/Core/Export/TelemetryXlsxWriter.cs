@@ -76,7 +76,9 @@ public static class TelemetryXlsxWriter
         );
 
         sb.Append("<row>");
-        foreach (string h in new[] { "timestamp", "sequence", "temperature", "humidity", "session_id" })
+        foreach (
+            string h in new[] { "timestamp", "sequence", "temperature", "humidity", "session_id" }
+        )
         {
             sb.Append(StrCell(h));
         }
@@ -104,10 +106,7 @@ public static class TelemetryXlsxWriter
 
     private static string StrCell(string value)
     {
-        string escaped = value
-            .Replace("&", "&amp;")
-            .Replace("<", "&lt;")
-            .Replace(">", "&gt;");
+        string escaped = value.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
         return $"<c t=\"inlineStr\"><is><t>{escaped}</t></is></c>";
     }
 
