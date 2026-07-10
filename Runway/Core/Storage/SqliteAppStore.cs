@@ -63,7 +63,8 @@ public sealed class SqliteAppStore : IAppStore
     private void MigrateTelemetrySessionId()
     {
         using var check = _connection.CreateCommand();
-        check.CommandText = "SELECT COUNT(*) FROM pragma_table_info('telemetry') WHERE name = 'session_id';";
+        check.CommandText =
+            "SELECT COUNT(*) FROM pragma_table_info('telemetry') WHERE name = 'session_id';";
         long exists = (long)check.ExecuteScalar()!;
 
         if (exists == 0)
@@ -117,7 +118,10 @@ public sealed class SqliteAppStore : IAppStore
             command.Parameters.AddWithValue("$sequence", record.Sequence);
             command.Parameters.AddWithValue("$temperature", record.Temperature);
             command.Parameters.AddWithValue("$humidity", record.Humidity);
-            command.Parameters.AddWithValue("$sessionId", (object?)record.SessionId ?? DBNull.Value);
+            command.Parameters.AddWithValue(
+                "$sessionId",
+                (object?)record.SessionId ?? DBNull.Value
+            );
             command.ExecuteNonQuery();
         }
     }
@@ -135,7 +139,10 @@ public sealed class SqliteAppStore : IAppStore
             command.Parameters.AddWithValue("$level", record.Level);
             command.Parameters.AddWithValue("$category", record.Category);
             command.Parameters.AddWithValue("$message", record.Message);
-            command.Parameters.AddWithValue("$sessionId", (object?)record.SessionId ?? DBNull.Value);
+            command.Parameters.AddWithValue(
+                "$sessionId",
+                (object?)record.SessionId ?? DBNull.Value
+            );
             command.ExecuteNonQuery();
         }
     }

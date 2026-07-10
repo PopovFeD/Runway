@@ -79,8 +79,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         _appStore = appStore;
         _sessions = sessionTracker ?? new SessionTracker();
         _boundedLog = new BoundedLog(LogEntries, maxLogEntries);
-        _exportDirectory =
-            exportDirectory ?? Path.Combine(AppContext.BaseDirectory, "exports");
+        _exportDirectory = exportDirectory ?? Path.Combine(AppContext.BaseDirectory, "exports");
 
         // Напрямую в поле, не через свойство: сеттер SelectedTransport дёргает
         // RefreshEndpoints, а команды на этот момент ещё не созданы.
@@ -138,8 +137,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     // в ComboBox — как и StatusText.
     public string ToggleConnectionText => _activeTransport == null ? "Подключить" : "Отключить";
 
-    private bool CanToggleConnection() =>
-        _activeTransport != null || (SelectedEndpoint != null);
+    private bool CanToggleConnection() => _activeTransport != null || (SelectedEndpoint != null);
 
     private void ToggleConnection()
     {
@@ -288,8 +286,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                 sb.Append(';').Append(e.Level);
                 sb.Append(';').Append(CsvField(e.Category));
                 sb.Append(';').Append(CsvField(e.Message));
-                sb.Append(';')
-                    .Append(e.SessionId?.ToString(CultureInfo.InvariantCulture) ?? "");
+                sb.Append(';').Append(e.SessionId?.ToString(CultureInfo.InvariantCulture) ?? "");
                 sb.AppendLine();
             }
 
@@ -422,7 +419,9 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         {
             try
             {
-                _sessions.Set(_appStore.BeginSession(_activeTransport.DisplayName, SelectedEndpoint));
+                _sessions.Set(
+                    _appStore.BeginSession(_activeTransport.DisplayName, SelectedEndpoint)
+                );
             }
             catch
             {
