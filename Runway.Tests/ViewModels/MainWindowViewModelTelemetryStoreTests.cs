@@ -86,7 +86,7 @@ public class MainWindowViewModelTelemetryStoreTests
         var store = new FakeAppStore();
         var vm = CreateViewModel(transport, store);
 
-        vm.ConnectCommand.Execute(null);
+        vm.Connection.ConnectCommand.Execute(null);
         transport.RaiseDataReceived(
             FrameTestHelper.BuildFrameBytes(1, (byte)MessageType.Telemetry, 5, TelemetryPayload)
         );
@@ -96,7 +96,7 @@ public class MainWindowViewModelTelemetryStoreTests
         Assert.Equal("COM3", session.Endpoint);
         Assert.Equal(session.Id, Assert.Single(store.Records).SessionId);
 
-        vm.DisconnectCommand.Execute(null);
+        vm.Connection.DisconnectCommand.Execute(null);
         Assert.Equal(session.Id, Assert.Single(store.EndedSessions));
 
         vm.Dispose();
@@ -109,7 +109,7 @@ public class MainWindowViewModelTelemetryStoreTests
         var store = new FakeAppStore();
         var vm = CreateViewModel(transport, store);
 
-        vm.ConnectCommand.Execute(null);
+        vm.Connection.ConnectCommand.Execute(null);
         transport.RaiseConnectionStateChanged(Runway.Transport.ConnectionState.Connected);
         transport.RaiseConnectionStateChanged(Runway.Transport.ConnectionState.Reconnecting);
 
@@ -118,18 +118,18 @@ public class MainWindowViewModelTelemetryStoreTests
         Assert.All(store.Events, e => Assert.NotNull(e.SessionId));
 
         // Оставляем только галочку Warning
-        vm.ShowInfo = false;
-        vm.ShowError = false;
-        vm.RefreshLogsCommand.Execute(null);
+        vm.Logs.ShowInfo = false;
+        vm.Logs.ShowError = false;
+        vm.Logs.RefreshLogsCommand.Execute(null);
 
-        var line = Assert.Single(vm.FilteredLogEvents);
+        var line = Assert.Single(vm.Logs.FilteredLogEvents);
         Assert.Contains("Reconnecting", line);
         Assert.Contains("[Warning]", line);
 
         // Все галочки сняты — показывать нечего
-        vm.ShowWarning = false;
-        vm.RefreshLogsCommand.Execute(null);
-        Assert.Empty(vm.FilteredLogEvents);
+        vm.Logs.ShowWarning = false;
+        vm.Logs.RefreshLogsCommand.Execute(null);
+        Assert.Empty(vm.Logs.FilteredLogEvents);
 
         vm.Dispose();
     }
@@ -153,17 +153,17 @@ public class MainWindowViewModelTelemetryStoreTests
 
         try
         {
-            vm.ConnectCommand.Execute(null); // Info "Подключение"
+            vm.Connection.ConnectCommand.Execute(null); // Info "Подключение"
             transport.RaiseConnectionStateChanged(
                 Runway.Transport.ConnectionState.Reconnecting
             ); // Warning
 
             // Экспортируем только Warning — как будто стоит одна галочка
-            vm.ShowInfo = false;
-            vm.ShowError = false;
-            vm.ExportLogsCommand.Execute(null);
+            vm.Logs.ShowInfo = false;
+            vm.Logs.ShowError = false;
+            vm.Logs.ExportLogsCommand.Execute(null);
 
-            Assert.StartsWith("Экспортировано 1 записей", vm.ExportStatusText);
+            Assert.StartsWith("Экспортировано 1 записей", vm.Logs.ExportStatusText);
 
             string csvPath = Assert.Single(Directory.GetFiles(exportDir, "*.csv"));
             string[] lines = File.ReadAllLines(csvPath);

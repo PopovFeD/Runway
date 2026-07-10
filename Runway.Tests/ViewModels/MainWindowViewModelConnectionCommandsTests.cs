@@ -18,7 +18,7 @@ public class MainWindowViewModelConnectionCommandsTests
 
         var vm = CreateViewModel(new[] { transport }, initialEndpoint: "COM6");
 
-        Assert.Equal("COM6", vm.SelectedEndpoint);
+        Assert.Equal("COM6", vm.Connection.SelectedEndpoint);
 
         vm.Dispose();
     }
@@ -32,7 +32,7 @@ public class MainWindowViewModelConnectionCommandsTests
         // переткнутый адаптер) — тогда берём первый доступный, а не ломаемся.
         var vm = CreateViewModel(new[] { transport }, initialEndpoint: "COM6");
 
-        Assert.Equal("COM3", vm.SelectedEndpoint);
+        Assert.Equal("COM3", vm.Connection.SelectedEndpoint);
 
         vm.Dispose();
     }
@@ -45,8 +45,8 @@ public class MainWindowViewModelConnectionCommandsTests
 
         var vm = CreateViewModel(new[] { transport });
 
-        Assert.Null(vm.SelectedEndpoint);
-        Assert.False(vm.ConnectCommand.CanExecute(null));
+        Assert.Null(vm.Connection.SelectedEndpoint);
+        Assert.False(vm.Connection.ConnectCommand.CanExecute(null));
 
         vm.Dispose();
     }
@@ -56,9 +56,9 @@ public class MainWindowViewModelConnectionCommandsTests
     {
         var transport = new FakeTransport("COM3", "COM6");
         var vm = CreateViewModel(new[] { transport });
-        vm.SelectedEndpoint = "COM6";
+        vm.Connection.SelectedEndpoint = "COM6";
 
-        vm.ConnectCommand.Execute(null);
+        vm.Connection.ConnectCommand.Execute(null);
 
         Assert.True(transport.IsOpen);
         Assert.Equal("COM6", transport.LastOpenedEndpoint);
@@ -71,16 +71,16 @@ public class MainWindowViewModelConnectionCommandsTests
     {
         var transport = new FakeTransport("COM3");
         var vm = CreateViewModel(new[] { transport });
-        vm.ConnectCommand.Execute(null);
+        vm.Connection.ConnectCommand.Execute(null);
         transport.RaiseConnectionStateChanged(ConnectionState.Connected);
 
-        vm.DisconnectCommand.Execute(null);
+        vm.Connection.DisconnectCommand.Execute(null);
 
         Assert.False(transport.IsOpen);
         Assert.Equal(1, transport.CloseCallCount);
         // SerialTransport.Close() сам события не поднимает (штатная остановка,
         // не разрыв) — статус обязана выставить сама ViewModel.
-        Assert.Equal(ConnectionState.Disconnected, vm.ConnectionStatus);
+        Assert.Equal(ConnectionState.Disconnected, vm.Connection.ConnectionStatus);
 
         vm.Dispose();
     }
@@ -91,16 +91,16 @@ public class MainWindowViewModelConnectionCommandsTests
         var transport = new FakeTransport("COM3");
         var vm = CreateViewModel(new[] { transport });
 
-        Assert.True(vm.ConnectCommand.CanExecute(null));
+        Assert.True(vm.Connection.ConnectCommand.CanExecute(null));
 
-        vm.ConnectCommand.Execute(null);
+        vm.Connection.ConnectCommand.Execute(null);
         transport.RaiseConnectionStateChanged(ConnectionState.Connected);
-        Assert.False(vm.ConnectCommand.CanExecute(null));
-        Assert.True(vm.DisconnectCommand.CanExecute(null));
+        Assert.False(vm.Connection.ConnectCommand.CanExecute(null));
+        Assert.True(vm.Connection.DisconnectCommand.CanExecute(null));
 
-        vm.DisconnectCommand.Execute(null);
-        Assert.True(vm.ConnectCommand.CanExecute(null));
-        Assert.False(vm.DisconnectCommand.CanExecute(null));
+        vm.Connection.DisconnectCommand.Execute(null);
+        Assert.True(vm.Connection.ConnectCommand.CanExecute(null));
+        Assert.False(vm.Connection.DisconnectCommand.CanExecute(null));
 
         vm.Dispose();
     }
@@ -110,14 +110,14 @@ public class MainWindowViewModelConnectionCommandsTests
     {
         var transport = new FakeTransport("COM3");
         var vm = CreateViewModel(new[] { transport });
-        vm.ConnectCommand.Execute(null);
+        vm.Connection.ConnectCommand.Execute(null);
 
         // Порт не открылся / разорвался — транспорт ушёл в цикл переподключения.
         // "Отключить" в этом состоянии — единственный способ его остановить.
         transport.RaiseConnectionStateChanged(ConnectionState.Reconnecting);
 
-        Assert.True(vm.DisconnectCommand.CanExecute(null));
-        Assert.False(vm.ConnectCommand.CanExecute(null));
+        Assert.True(vm.Connection.DisconnectCommand.CanExecute(null));
+        Assert.False(vm.Connection.ConnectCommand.CanExecute(null));
 
         vm.Dispose();
     }
@@ -129,12 +129,12 @@ public class MainWindowViewModelConnectionCommandsTests
         var wifi = new FakeTransport("192.168.1.42:3333") { DisplayName = "WiFi" };
         var vm = CreateViewModel(new[] { serial, wifi });
 
-        Assert.Equal(new[] { "COM3", "COM6" }, vm.AvailableEndpoints);
+        Assert.Equal(new[] { "COM3", "COM6" }, vm.Connection.AvailableEndpoints);
 
-        vm.SelectedTransport = wifi;
+        vm.Connection.SelectedTransport = wifi;
 
-        Assert.Equal(new[] { "192.168.1.42:3333" }, vm.AvailableEndpoints);
-        Assert.Equal("192.168.1.42:3333", vm.SelectedEndpoint);
+        Assert.Equal(new[] { "192.168.1.42:3333" }, vm.Connection.AvailableEndpoints);
+        Assert.Equal("192.168.1.42:3333", vm.Connection.SelectedEndpoint);
 
         vm.Dispose();
     }
@@ -144,11 +144,11 @@ public class MainWindowViewModelConnectionCommandsTests
     {
         var transport = new FakeTransport("COM3", "COM6");
         var vm = CreateViewModel(new[] { transport });
-        vm.SelectedEndpoint = "COM6";
+        vm.Connection.SelectedEndpoint = "COM6";
 
-        vm.RefreshEndpointsCommand.Execute(null);
+        vm.Connection.RefreshEndpointsCommand.Execute(null);
 
-        Assert.Equal("COM6", vm.SelectedEndpoint);
+        Assert.Equal("COM6", vm.Connection.SelectedEndpoint);
 
         vm.Dispose();
     }
@@ -160,19 +160,19 @@ public class MainWindowViewModelConnectionCommandsTests
         var wifi = new FakeTransport("192.168.1.42:3333") { DisplayName = "WiFi" };
         var vm = CreateViewModel(new[] { serial, wifi });
 
-        Assert.Equal("Отключено", vm.StatusText);
+        Assert.Equal("Отключено", vm.Connection.StatusText);
 
-        vm.ConnectCommand.Execute(null);
+        vm.Connection.ConnectCommand.Execute(null);
         serial.RaiseConnectionStateChanged(ConnectionState.Connected);
-        Assert.Equal("Подключено: Serial · COM3", vm.StatusText);
+        Assert.Equal("Подключено: Serial · COM3", vm.Connection.StatusText);
 
         // Пользователь листает список — реальное соединение не меняется,
         // и индикатор продолжает показывать его, а не текущий выбор.
-        vm.SelectedTransport = wifi;
-        Assert.Equal("Подключено: Serial · COM3", vm.StatusText);
+        vm.Connection.SelectedTransport = wifi;
+        Assert.Equal("Подключено: Serial · COM3", vm.Connection.StatusText);
 
-        vm.DisconnectCommand.Execute(null);
-        Assert.Equal("Отключено", vm.StatusText);
+        vm.Connection.DisconnectCommand.Execute(null);
+        Assert.Equal("Отключено", vm.Connection.StatusText);
 
         vm.Dispose();
     }
@@ -183,16 +183,16 @@ public class MainWindowViewModelConnectionCommandsTests
         var transport = new FakeTransport("COM3");
         var vm = CreateViewModel(new[] { transport });
 
-        Assert.Equal("Подключить", vm.ToggleConnectionText);
+        Assert.Equal("Подключить", vm.Connection.ToggleConnectionText);
 
-        vm.ToggleConnectionCommand.Execute(null);
+        vm.Connection.ToggleConnectionCommand.Execute(null);
         Assert.True(transport.IsOpen);
-        Assert.Equal("Отключить", vm.ToggleConnectionText);
+        Assert.Equal("Отключить", vm.Connection.ToggleConnectionText);
 
-        vm.ToggleConnectionCommand.Execute(null);
+        vm.Connection.ToggleConnectionCommand.Execute(null);
         Assert.False(transport.IsOpen);
-        Assert.Equal("Подключить", vm.ToggleConnectionText);
-        Assert.Equal(ConnectionState.Disconnected, vm.ConnectionStatus);
+        Assert.Equal("Подключить", vm.Connection.ToggleConnectionText);
+        Assert.Equal(ConnectionState.Disconnected, vm.Connection.ConnectionStatus);
 
         vm.Dispose();
     }
@@ -203,7 +203,7 @@ public class MainWindowViewModelConnectionCommandsTests
         var transport = new FakeTransport();
         var vm = CreateViewModel(new[] { transport });
 
-        Assert.False(vm.ToggleConnectionCommand.CanExecute(null));
+        Assert.False(vm.Connection.ToggleConnectionCommand.CanExecute(null));
 
         vm.Dispose();
     }
