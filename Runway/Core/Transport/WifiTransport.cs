@@ -22,7 +22,7 @@ public class WifiTransport : ITransport
         _logger = logger ?? NullLogger<WifiTransport>.Instance;
     }
 
-    public string DisplayName => "WiFi (ESP32)";
+    public string DisplayName => "WiFi (Заглушка)";
 
     public bool IsOpen => false;
 
