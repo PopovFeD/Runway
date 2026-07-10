@@ -38,8 +38,14 @@
             <Setter Property="MinHeight" Value="36"/>
         </Style>
         <Style Selector="ListBox.terminal">
-            <Setter Property="Background" Value="#1E1E1E"/>
-            <Setter Property="Foreground" Value="#D4D4D4"/>
+            <!-- Автоматически подстраивается под светлую/тёмную тему -->
+            <Setter Property="Background"
+                    Value="{DynamicResource SystemControlBackgroundAltHighBrush}"/>
+            <Setter Property="Foreground"
+                    Value="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+            <Setter Property="BorderBrush"
+                    Value="{DynamicResource SystemControlForegroundBaseLowBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="6"/>
             <Setter Property="Padding" Value="4"/>
         </Style>
@@ -82,7 +88,7 @@
 
             <TabItem Header="Дашборд">
                 <!-- Верх: разделы плиток по протоколам; низ: терминал.
-                     GridSplitter между ними таскается, высоты меняются -->
+                GridSplitter между ними таскается, высоты меняются -->
                 <Grid RowDefinitions="2*,4,3*">
 
                     <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
@@ -170,7 +176,7 @@
 
             <TabItem Header="Экспорт">
                 <!-- По макету: формат + «все записи» / «эта сессия» + счётчик.
-                     Экспортируется телеметрия; экспорт логов — во вкладке "Логи" -->
+                Экспортируется телеметрия; экспорт логов — во вкладке "Логи" -->
                 <StackPanel Margin="4" Spacing="10" HorizontalAlignment="Left">
                     <TextBlock Text="Формат" Classes="tileTitle"/>
                     <ComboBox MinWidth="180"
