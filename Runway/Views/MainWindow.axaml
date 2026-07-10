@@ -62,16 +62,16 @@
         <Border DockPanel.Dock="Top" Classes="bar">
             <DockPanel>
                 <Button DockPanel.Dock="Right"
-                        Content="{Binding ToggleConnectionText}"
-                        Command="{Binding ToggleConnectionCommand}"/>
-                <TextBlock VerticalAlignment="Center" Text="{Binding StatusText}"/>
+                        Content="{Binding Connection.ToggleConnectionText}"
+                        Command="{Binding Connection.ToggleConnectionCommand}"/>
+                <TextBlock VerticalAlignment="Center" Text="{Binding Connection.StatusText}"/>
             </DockPanel>
         </Border>
 
         <!-- НИЖНЯЯ СТАТУС-ПАНЕЛЬ -->
         <Border DockPanel.Dock="Bottom" Classes="bar" Padding="12,4">
             <DockPanel>
-                <TextBlock FontSize="12" Text="{Binding StatusText}"/>
+                <TextBlock FontSize="12" Text="{Binding Connection.StatusText}"/>
                 <TextBlock DockPanel.Dock="Right" FontSize="12"
                            HorizontalAlignment="Right"
                            Text="{Binding LogEntries.Count, StringFormat='Записей в выводе: {0}'}"/>
@@ -126,8 +126,8 @@
                 <StackPanel Spacing="10" Margin="4">
                     <TextBlock Text="Транспорт" Classes="tileTitle"/>
                     <ComboBox MinWidth="220"
-                              ItemsSource="{Binding Transports}"
-                              SelectedItem="{Binding SelectedTransport}">
+                              ItemsSource="{Binding Connection.Transports}"
+                              SelectedItem="{Binding Connection.SelectedTransport}">
                         <ComboBox.ItemTemplate>
                             <DataTemplate x:DataType="tr:ITransport">
                                 <TextBlock Text="{Binding DisplayName}"/>
@@ -138,17 +138,13 @@
                     <TextBlock Text="Точка подключения" Classes="tileTitle"/>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <ComboBox MinWidth="220"
-                                  ItemsSource="{Binding AvailableEndpoints}"
-                                  SelectedItem="{Binding SelectedEndpoint}"/>
-                        <Button Content="Обновить список" Command="{Binding RefreshEndpointsCommand}"/>
+                                  ItemsSource="{Binding Connection.AvailableEndpoints}"
+                                  SelectedItem="{Binding Connection.SelectedEndpoint}"/>
+                        <Button Content="Обновить список" Command="{Binding Connection.RefreshEndpointsCommand}"/>
                     </StackPanel>
 
-                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
-                        <Button Content="Подключить" Command="{Binding ConnectCommand}"/>
-                        <Button Content="Отключить" Command="{Binding DisconnectCommand}"/>
-                    </StackPanel>
 
-                    <TextBlock Text="{Binding StatusText}" Margin="0,6,0,0"/>
+                    <TextBlock Text="{Binding Connection.StatusText}" Margin="0,6,0,0"/>
                 </StackPanel>
             </TabItem>
 
@@ -173,21 +169,21 @@
                     Чтение из SQLite (events) по кнопке; живой поток — на Дашборде -->
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal"
                                 Spacing="12" Margin="0,0,0,8">
-                        <CheckBox Content="Info" IsChecked="{Binding ShowInfo}"/>
-                        <CheckBox Content="Warning" IsChecked="{Binding ShowWarning}"/>
-                        <CheckBox Content="Error" IsChecked="{Binding ShowError}"/>
+                        <CheckBox Content="Info" IsChecked="{Binding Logs.ShowInfo}"/>
+                        <CheckBox Content="Warning" IsChecked="{Binding Logs.ShowWarning}"/>
+                        <CheckBox Content="Error" IsChecked="{Binding Logs.ShowError}"/>
                         <CheckBox Content="Только текущая сессия"
-                                  IsChecked="{Binding OnlyCurrentSession}"/>
-                        <Button Content="Обновить" Command="{Binding RefreshLogsCommand}"/>
-                        <Button Content="Экспорт" Command="{Binding ExportLogsCommand}"/>
+                                  IsChecked="{Binding Logs.OnlyCurrentSession}"/>
+                        <Button Content="Обновить" Command="{Binding Logs.RefreshLogsCommand}"/>
+                        <Button Content="Экспорт" Command="{Binding Logs.ExportLogsCommand}"/>
                     </StackPanel>
 
                     <!-- Результат последнего экспорта: путь к файлу или ошибка -->
                     <TextBlock DockPanel.Dock="Bottom" Classes="tileTitle"
                                Margin="0,6,0,0" TextWrapping="Wrap"
-                               Text="{Binding ExportStatusText}"/>
+                               Text="{Binding Logs.ExportStatusText}"/>
 
-                    <ListBox ItemsSource="{Binding FilteredLogEvents}"
+                    <ListBox ItemsSource="{Binding Logs.FilteredLogEvents}"
                              FontFamily="Cascadia Mono,Consolas,monospace" FontSize="12"/>
                 </DockPanel>
             </TabItem>

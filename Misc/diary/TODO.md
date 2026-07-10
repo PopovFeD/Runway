@@ -11,9 +11,6 @@
 - [ ] Управляющие команды (устройству): `PacketBuilder` готов,
       нужен `MessageType.Command` + отправка в `ITransport` (метод Write
       в интерфейсе отсутствует — добавить) + GUI на вкладке «Команды»
-- [ ] Разделение `MainWindowViewModel` по вкладкам (Connection/Dashboard/
-      Logs/Commands/Export) — он уже большой; делать ДО серьёзной вёрстки
-      оставшихся вкладок
 - [ ] Сохранение выбора подключения в `settings.json` при Connect
       (`SettingsLoader.Save` есть) + сверка при старте, что сохранённый
       способ подключения ещё существует

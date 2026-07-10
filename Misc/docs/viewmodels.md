@@ -1,16 +1,27 @@
 # ViewModels
 
-`MainWindowViewModel` — центр приложения: соединяет Transport → Framing →
-Protocol → Storage/Logging и отдаёт всё это GUI через биндинги. `ViewLocator` +
-`ViewModelBase` — стандартный каркас Avalonia (CommunityToolkit.Mvvm,
-`ObservableObject`).
+Разделены по вкладкам (закрыт пункт TODO): `MainWindowViewModel` — корень,
+в нём КОНВЕЙЕР ДАННЫХ и Дашборд (живой вывод + плитки), плюс композиция
+дочерних: `Connection` (`ConnectionViewModel` — транспорты, точки, статус,
+кнопка вкл/выкл, сессии) и `Logs` (`LogsViewModel` — галочки-фильтры,
+чтение событий, CSV-экспорт). GUI биндится через префиксы
+(`Connection.StatusText`, `Logs.ShowInfo`, ...). `ViewLocator` +
+`ViewModelBase` — стандартный каркас Avalonia (CommunityToolkit.Mvvm).
+
+Разделение событий транспорта: `DataReceived` (поток данных) слушает
+MainWindowViewModel — конвейер живёт там; `ConnectionStateChanged` —
+ConnectionViewModel. Общие для всех точки: `SessionTracker` (id текущей
+сессии) и `IAppStore.TrySaveEvent(...)` (событие в БД, не роняя вызывающего).
+
+Кнопок Подключить/Отключить во вкладке «Подключение» больше нет — единственная
+кнопка-переключатель в верхней панели (ToggleConnectionCommand).
 
 Файлы: `Runway/ViewModels/MainWindowViewModel.cs`, `ViewModelBase.cs`,
 `Runway/ViewLocator.cs`, разметка — `Runway/Views/MainWindow.axaml`.
 
 ---
 
-## Подключение (GUI)
+## ConnectionViewModel
 
 * `Transports` / `SelectedTransport` — список способов подключения
   (`ITransport`: Serial рабочий, WiFi — заглушка). Смена транспорта

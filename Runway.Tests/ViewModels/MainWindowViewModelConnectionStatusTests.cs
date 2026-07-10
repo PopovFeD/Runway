@@ -25,7 +25,7 @@ public class MainWindowViewModelConnectionStatusTests
     {
         var vm = CreateConnectedViewModel(out _);
 
-        Assert.Equal(ConnectionState.Disconnected, vm.ConnectionStatus);
+        Assert.Equal(ConnectionState.Disconnected, vm.Connection.ConnectionStatus);
 
         vm.Dispose();
     }
@@ -40,7 +40,7 @@ public class MainWindowViewModelConnectionStatusTests
 
         transport.RaiseConnectionStateChanged(state);
 
-        Assert.Equal(state, vm.ConnectionStatus);
+        Assert.Equal(state, vm.Connection.ConnectionStatus);
 
         vm.Dispose();
     }
@@ -51,16 +51,16 @@ public class MainWindowViewModelConnectionStatusTests
         var vm = CreateConnectedViewModel(out var transport);
 
         transport.RaiseConnectionStateChanged(ConnectionState.Connected);
-        Assert.Equal(ConnectionState.Connected, vm.ConnectionStatus);
+        Assert.Equal(ConnectionState.Connected, vm.Connection.ConnectionStatus);
 
         transport.RaiseConnectionStateChanged(ConnectionState.Disconnected);
-        Assert.Equal(ConnectionState.Disconnected, vm.ConnectionStatus);
+        Assert.Equal(ConnectionState.Disconnected, vm.Connection.ConnectionStatus);
 
         transport.RaiseConnectionStateChanged(ConnectionState.Reconnecting);
-        Assert.Equal(ConnectionState.Reconnecting, vm.ConnectionStatus);
+        Assert.Equal(ConnectionState.Reconnecting, vm.Connection.ConnectionStatus);
 
         transport.RaiseConnectionStateChanged(ConnectionState.Connected);
-        Assert.Equal(ConnectionState.Connected, vm.ConnectionStatus);
+        Assert.Equal(ConnectionState.Connected, vm.Connection.ConnectionStatus);
 
         vm.Dispose();
     }
@@ -71,13 +71,13 @@ public class MainWindowViewModelConnectionStatusTests
         var vm = CreateConnectedViewModel(out var transport);
         transport.RaiseConnectionStateChanged(ConnectionState.Connected);
 
-        vm.DisconnectCommand.Execute(null);
+        vm.Connection.DisconnectCommand.Execute(null);
 
         // Событие, "застрявшее" в очереди UI-диспетчера на момент отключения,
         // не должно перетереть статус Disconnected, выставленный пользователем.
         transport.RaiseConnectionStateChanged(ConnectionState.Connected);
 
-        Assert.Equal(ConnectionState.Disconnected, vm.ConnectionStatus);
+        Assert.Equal(ConnectionState.Disconnected, vm.Connection.ConnectionStatus);
 
         vm.Dispose();
     }
@@ -95,7 +95,7 @@ public class MainWindowViewModelConnectionStatusTests
 
         Assert.Null(exception);
         // Событие после Dispose до VM уже не доходит — статус остаётся прежним.
-        Assert.Equal(ConnectionState.Connected, vm.ConnectionStatus);
+        Assert.Equal(ConnectionState.Connected, vm.Connection.ConnectionStatus);
     }
 
     private static MainWindowViewModel CreateConnectedViewModel(out FakeTransport transport)
@@ -108,7 +108,7 @@ public class MainWindowViewModelConnectionStatusTests
         );
 
         // Endpoint "FAKE1" выбран автоматически (единственный в списке)
-        vm.ConnectCommand.Execute(null);
+        vm.Connection.ConnectCommand.Execute(null);
 
         return vm;
     }

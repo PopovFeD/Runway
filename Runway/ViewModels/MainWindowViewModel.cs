@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
-using CommunityToolkit.Mvvm.Input;
 using Runway.Framing;
 using Runway.Logging;
 using Runway.Protocol;
@@ -13,49 +12,27 @@ using Runway.Transport;
 
 namespace Runway.ViewModels;
 
+// Корневая ViewModel окна. После разделения по вкладкам здесь остались только
+// КОНВЕЙЕР ДАННЫХ (кадры → пакеты → БД/живой вывод/плитки) и композиция
+// дочерних ViewModel: Connection (подключение/сессии) и Logs (фильтры/экспорт).
 public class MainWindowViewModel : ViewModelBase, IDisposable
 {
     private readonly FrameReader _frameReader;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly BoundedLog _boundedLog;
-
-    // Транспорт, которому реально сказали Open() — только его и нужно закрывать.
-    // Не то же самое, что SelectedTransport: пользователь может выбрать в списке
-    // другой транспорт, пока активный ещё подключён (Connect до этого не дойдёт —
-    // кнопка выключена, — но выбор в ComboBox уже поменяется).
-    private ITransport? _activeTransport;
-
-    // Точка, к которой реально подключены (для индикатора StatusText) — выбор
-    // в ComboBox может уже уехать на другой транспорт/порт, индикатор не должен.
-    private string? _activeEndpoint;
-
-    // Хранилище данных приложения; null — работаем без БД (например, в части тестов).
     private readonly IAppStore? _appStore;
-
-    // Текущая сессия подключения — общая с StoreLoggerProvider (diagnostics-
-    // события транспорта получают тот же session_id, что и события ViewModel).
     private readonly SessionTracker _sessions;
 
-    // Куда складывать CSV-экспорт логов (см. ExportLogs); в тестах — временный каталог.
-    private readonly string _exportDirectory;
-
-    // Очередь между read-потоком порта (продюсер) и разбором пакетов (консьюмер).
-    // Смысл: OnDataReceived вызывается прямо из фонового потока SerialTransport.ReadLoop,
-    // и всё, что там выполняется синхронно, тормозит следующий Port.Read().
-    // Сейчас разбор дешёвый, но когда сюда добавится запись в SQLite — это будет уже
-    // не мелочь. Поэтому OnDataReceived только режет байты на кадры и кладёт их в канал,
-    // а PacketParser.Parse (и в будущем — запись в БД) переезжает в ProcessFramesAsync,
-    // который крутится в отдельной задаче независимо от порта.
+    // Очередь между read-потоком порта (продюсер) и разбором пакетов (консьюмер):
+    // OnDataReceived вызывается прямо из фонового потока транспорта, и всё
+    // синхронное там тормозит следующий Port.Read(). Поэтому здесь только
+    // нарезка на кадры, а разбор и запись в SQLite — в ProcessFramesAsync.
     private readonly Channel<Frame> _frameChannel = Channel.CreateUnbounded<Frame>(
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = true }
     );
 
     private readonly CancellationTokenSource _processingCts = new();
     private readonly Task _processingTask;
-
-    private ConnectionState _connectionStatus = ConnectionState.Disconnected;
-    private ITransport _selectedTransport;
-    private string? _selectedEndpoint;
 
     public MainWindowViewModel(
         FrameReader frameReader,
@@ -68,63 +45,42 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         string? exportDirectory = null
     )
     {
-        if (transports.Count == 0)
-        {
-            throw new ArgumentException("Нужен хотя бы один транспорт.", nameof(transports));
-        }
-
         _frameReader = frameReader;
-        Transports = transports;
         _uiDispatcher = uiDispatcher;
         _appStore = appStore;
         _sessions = sessionTracker ?? new SessionTracker();
         _boundedLog = new BoundedLog(LogEntries, maxLogEntries);
+<<<<<<< HEAD
         _exportDirectory = exportDirectory ?? Path.Combine(AppContext.BaseDirectory, "exports");
+=======
+>>>>>>> hmm
 
-        // Напрямую в поле, не через свойство: сеттер SelectedTransport дёргает
-        // RefreshEndpoints, а команды на этот момент ещё не созданы.
-        _selectedTransport = transports[0];
+        Connection = new ConnectionViewModel(
+            transports,
+            uiDispatcher,
+            appStore,
+            _sessions,
+            initialEndpoint
+        );
+        Logs = new LogsViewModel(appStore, _sessions, exportDirectory);
 
-        // Подписываемся сразу на все транспорты, а не только на активный:
-        // события всё равно шлёт лишь тот, у кого вызван Open, зато не нужно
-        // переподписываться при каждом Connect/Disconnect.
-        foreach (var transport in Transports)
+        // Поток ДАННЫХ подписан здесь (конвейер живёт в этой VM);
+        // состоянием подключения занимается Connection.
+        foreach (var transport in transports)
         {
             transport.DataReceived += OnDataReceived;
-            transport.ConnectionStateChanged += OnConnectionStateChanged;
-        }
-
-        RefreshEndpointsCommand = new RelayCommand(RefreshEndpoints);
-        ConnectCommand = new RelayCommand(Connect, CanConnect);
-        DisconnectCommand = new RelayCommand(Disconnect, CanDisconnect);
-        RefreshLogsCommand = new RelayCommand(RefreshLogs);
-        ExportLogsCommand = new RelayCommand(ExportLogs);
-        ToggleConnectionCommand = new RelayCommand(ToggleConnection, CanToggleConnection);
-
-        RefreshEndpoints();
-
-        // Порт из настроек — только предвыбор в списке, не автоподключение.
-        // Если такого порта в системе сейчас нет, остаётся выбор RefreshEndpoints.
-        if (initialEndpoint != null && AvailableEndpoints.Contains(initialEndpoint))
-        {
-            SelectedEndpoint = initialEndpoint;
         }
 
         _processingTask = Task.Run(() => ProcessFramesAsync(_processingCts.Token));
     }
 
-    // Все известные приложению способы подключения (Serial, WiFi-заглушка, ...) —
-    // источник для ComboBox выбора транспорта в GUI.
-    public IReadOnlyList<ITransport> Transports { get; }
+    public ConnectionViewModel Connection { get; }
+    public LogsViewModel Logs { get; }
 
-    // Точки подключения выбранного транспорта (COM-порты / адреса устройств) —
-    // источник для второго ComboBox. Обновляется при смене транспорта и по кнопке.
-    public ObservableCollection<string> AvailableEndpoints { get; } = new();
-
-    // Сюда GUI смотрит, чтобы показать живой вывод. Ограничена по размеру через
-    // _boundedLog — история без ограничений лежит в БД (telemetry + events).
+    // Живой вывод для Дашборда. Ограничен через _boundedLog — история в БД.
     public ObservableCollection<string> LogEntries { get; } = new();
 
+<<<<<<< HEAD
     public RelayCommand RefreshEndpointsCommand { get; }
     public RelayCommand ConnectCommand { get; }
     public RelayCommand DisconnectCommand { get; }
@@ -151,6 +107,8 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
+=======
+>>>>>>> hmm
     // --- Последние значения для плиток Дашборда ---
 
     private string _lastTemperatureText = "—";
@@ -181,6 +139,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         private set => SetProperty(ref _lastLightText, value);
     }
 
+<<<<<<< HEAD
     // --- Вкладка "Логи": фильтруемое чтение событий из БД ---
 
     // Галочки-фильтры: каждая отвечает за свой тип сообщений. Что выбрано —
@@ -508,24 +467,23 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         });
     }
 
+=======
+>>>>>>> hmm
     // Вызывается напрямую из read-потока транспорта (см. SerialTransport.ReadLoop).
-    // Должен оставаться максимально дешёвым: только выделение кадров из потока байт
-    // (FrameReader.Append — операции в памяти без I/O) и запись готовых кадров в канал.
-    // Никакого разбора протокола и никакого I/O здесь быть не должно.
+    // Должен оставаться максимально дешёвым: только выделение кадров из потока
+    // байт (операции в памяти) и запись в канал. Никакого I/O здесь.
     private void OnDataReceived(byte[] bytes)
     {
         var frames = _frameReader.Append(bytes);
 
         foreach (var frame in frames)
         {
-            // Канал безлимитный, TryWrite не блокирует и не может вернуть false —
-            // пишем без ожидания, чтобы read-поток порта не задержался ни на миллисекунду.
+            // Канал безлимитный: TryWrite не блокирует и не возвращает false
             _frameChannel.Writer.TryWrite(frame);
         }
     }
 
-    // Консьюмер очереди. Работает в собственной задаче, никак не связанной с потоком
-    // чтения порта — сюда же в будущем переедет запись разобранного пакета в SQLite.
+    // Консьюмер очереди — отдельная задача, не связанная с потоком порта.
     private async Task ProcessFramesAsync(CancellationToken cancellationToken)
     {
         try
@@ -538,10 +496,8 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                 {
                     packet = PacketParser.Parse(frame);
 
-                    // Телеметрия — в БД. Мы в консьюмере, read-поток порта это
-                    // не задевает (ради чего Channel<Frame> и заводился).
-                    // Ошибка записи не должна ни маскироваться под ParseError,
-                    // ни останавливать конвейер — ловим её отдельно.
+                    // Телеметрия — в БД; ошибка записи не маскируется под
+                    // ParseError и не останавливает конвейер
                     if (packet is TelemetryPacket telemetry && _appStore != null)
                     {
                         try
@@ -558,9 +514,8 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                         }
                         catch (Exception ex)
                         {
-                            // Скорее всего и SaveEvent упадёт (та же БД) — тогда
-                            // событие тихо потеряется, но след останется в GUI-строке
-                            SaveEventQuietly(
+                            _appStore.TrySaveEvent(
+                                _sessions,
                                 "Error",
                                 "Storage",
                                 $"Seq={frame.Sequence}: {ex.Message}"
@@ -570,10 +525,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
                     line = packet switch
                     {
-                        // CultureInfo.InvariantCulture — иначе на системах с русской локалью
-                        // {t.Temperature:F2} даёт "24,53" вместо "24.53" (запятая вместо точки
-                        // как разделитель дробной части). Лог должен выглядеть одинаково
-                        // независимо от локали ОС, на которой запущено приложение.
+                        // InvariantCulture — иначе на русской локали "24,53"
                         TelemetryPacket t => string.Create(
                             CultureInfo.InvariantCulture,
                             $"Seq={frame.Sequence}  T={t.Temperature:F2}°C  H={t.Humidity:F2}%"
@@ -582,8 +534,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                             CultureInfo.InvariantCulture,
                             $"Seq={frame.Sequence}  P={e.PressureHpa:F2} hPa  L={e.LightLux:F2} lx"
                         ),
-                        // ToUpperInvariant — служебные записи в логе исторически
-                        // выглядят как "PING"/"PONG", а не "Ping"
+                        // ToUpperInvariant — служебные записи исторически "PING"
                         ControlPacket c =>
                             $"Seq={frame.Sequence}  {c.Type.ToString().ToUpperInvariant()}",
                         _ => $"Seq={frame.Sequence}  Type={frame.MessageType}",
@@ -593,16 +544,15 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                 {
                     line =
                         $"Seq={frame.Sequence}  Type=0x{frame.MessageType:X2}  ParseError: {ex.Message}";
-                    SaveEventQuietly(
+                    _appStore.TrySaveEvent(
+                        _sessions,
                         "Warning",
                         "Parser",
                         $"Seq={frame.Sequence} Type=0x{frame.MessageType:X2}: {ex.Message}"
                     );
                 }
 
-                // В GUI — строка в лог-стиле (время, как в терминале VS Code),
-                // с ограничением через BoundedLog, чтобы не тормозить ListBox
-                // и не есть память сколь угодно долго работающей сессии.
+                // В GUI — строка в лог-стиле (метка времени, как в терминале)
                 string guiLine = string.Create(
                     CultureInfo.InvariantCulture,
                     $"{DateTime.Now:HH:mm:ss.fff}  {line}"
@@ -645,16 +595,15 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    // Останавливает консьюмера и отписывается от транспортов. Вызывается из App при
-    // выходе из приложения (см. App.axaml.cs). Сами транспорты здесь не закрываются —
-    // ими, как и хранилищем, владеет тот, кто их создал (App.axaml.cs).
+    // Останавливает консьюмера и отписывается от транспортов. Транспортами
+    // и хранилищем владеет App.axaml.cs.
     public void Dispose()
     {
-        foreach (var transport in Transports)
+        foreach (var transport in Connection.Transports)
         {
             transport.DataReceived -= OnDataReceived;
-            transport.ConnectionStateChanged -= OnConnectionStateChanged;
         }
+        Connection.Dispose();
 
         _frameChannel.Writer.TryComplete();
         _processingCts.Cancel();
