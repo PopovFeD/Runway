@@ -83,8 +83,26 @@ public partial class App : Application
                 appStore,
                 sessionTracker,
                 settings.MaxLogEntries,
-                initialEndpoint: settings.PortName
+                initialEndpoint: settings.PortName,
+                hiddenSections: settings.HiddenDashboardSections
             );
+
+            // Галочки разделов Дашборда (вкладка "Настройки") сохраняются
+            // в settings.json при каждом переключении
+            foreach (var section in mainViewModel.Sections)
+            {
+                section.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName == nameof(ProtocolSectionViewModel.IsVisible))
+                    {
+                        settings.HiddenDashboardSections = mainViewModel
+                            .Sections.Where(s => !s.IsVisible)
+                            .Select(s => s.ProtocolKey)
+                            .ToList();
+                        SettingsLoader.Save(settings);
+                    }
+                };
+            }
 
             // Порядок важен: консьюмер кадров → транспорты (они ещё могут писать
             // в логи при закрытии) → фабрика логгеров (закроет fileLoggerProvider

@@ -10,8 +10,7 @@
 
     <!-- Каркас по GUI-макету (Misc/gui_mockups/): постоянные верхняя панель,
     сайдбар навигации и нижняя статус-панель; контент — вкладками.
-    Функционал только существующий: подключение + живой вывод (LogEntries).
-    Команды/Экспорт/Настройки — заглушки до разделения ViewModel. -->
+    Заглушкой осталась только вкладка "Команды". -->
 
     <Window.Styles>
         <!-- Полупрозрачные фоны/рамки — одинаково приличны в светлой и тёмной теме -->
@@ -82,44 +81,60 @@
         <TabControl TabStripPlacement="Left" Padding="12,8">
 
             <TabItem Header="Дашборд">
-                <DockPanel>
-                    <!-- Последние принятые значения по каждому типу пакета -->
-                    <UniformGrid DockPanel.Dock="Top" Columns="4" Margin="0,0,0,10">
-                        <Border Classes="tile" Margin="0,0,8,0">
-                            <StackPanel>
-                                <TextBlock Classes="tileTitle" Text="Температура"/>
-                                <TextBlock Classes="tileValue" Text="{Binding LastTemperatureText}"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Classes="tile" Margin="0,0,8,0">
-                            <StackPanel>
-                                <TextBlock Classes="tileTitle" Text="Влажность"/>
-                                <TextBlock Classes="tileValue" Text="{Binding LastHumidityText}"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Classes="tile" Margin="0,0,8,0">
-                            <StackPanel>
-                                <TextBlock Classes="tileTitle" Text="Давление"/>
-                                <TextBlock Classes="tileValue" Text="{Binding LastPressureText}"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Classes="tile">
-                            <StackPanel>
-                                <TextBlock Classes="tileTitle" Text="Освещённость"/>
-                                <TextBlock Classes="tileValue" Text="{Binding LastLightText}"/>
-                            </StackPanel>
-                        </Border>
-                    </UniformGrid>
+                <!-- Верх: разделы плиток по протоколам; низ: терминал.
+                     GridSplitter между ними таскается, высоты меняются -->
+                <Grid RowDefinitions="2*,4,3*">
 
-                    <TextBlock DockPanel.Dock="Top" Classes="tileTitle"
-                               Text="Живой вывод · последние записи" Margin="0,0,0,4"/>
+                    <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Sections}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ProtocolSectionViewModel">
+                                    <StackPanel IsVisible="{Binding IsVisible}" Margin="0,0,0,10">
+                                        <!-- Заголовок раздела мелкий — не нарушает плиточность -->
+                                        <TextBlock Classes="tileTitle" FontSize="11"
+                                                   Text="{Binding Header}" Margin="2,0,0,3"/>
+                                        <ItemsControl ItemsSource="{Binding Tiles}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:TileViewModel">
+                                                    <Border Classes="tile" Margin="0,0,8,8" MinWidth="150">
+                                                        <StackPanel>
+                                                            <TextBlock Classes="tileTitle" Text="{Binding Title}"/>
+                                                            <TextBlock Classes="tileValue" Text="{Binding Value}"/>
+                                                            <!-- Время обновления внизу карточки, как в макете -->
+                                                            <TextBlock Classes="tileTitle" FontSize="10"
+                                                                       Text="{Binding UpdatedAtText}" Margin="0,3,0,0"/>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
 
-                    <!-- Живой вывод в терминальном стиле (см. мокап): тёмный фон,
-                    плотные строки, автопрокрутка вниз — код в MainWindow.axaml.cs -->
-                    <ListBox x:Name="LiveOutput" Classes="terminal"
-                             ItemsSource="{Binding LogEntries}"
-                             FontFamily="Cascadia Mono,Consolas,monospace" FontSize="12"/>
-                </DockPanel>
+                    <GridSplitter Grid.Row="1" Height="4" HorizontalAlignment="Stretch"
+                                  Background="#40808080" ResizeDirection="Rows"/>
+
+                    <!-- Терминал + кнопка слежения поверх него (как "прокрутить вниз"
+                    на сайтах). Автопрокрутка работает только при нажатой кнопке -->
+                    <Grid Grid.Row="2" Margin="0,6,0,0">
+                        <ListBox x:Name="LiveOutput" Classes="terminal"
+                                 ItemsSource="{Binding LogEntries}"
+                                 FontFamily="Cascadia Mono,Consolas,monospace" FontSize="12"/>
+                        <ToggleButton IsChecked="{Binding FollowTail}"
+                                      Content="⤓" FontSize="14" Padding="8,2"
+                                      HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                      Margin="0,0,18,10" Opacity="0.85"
+                                      ToolTip.Tip="Следовать за последними записями"/>
+                    </Grid>
+                </Grid>
             </TabItem>
 
             <TabItem Header="Подключение">
@@ -202,8 +217,21 @@
             </TabItem>
 
             <TabItem Header="Настройки">
-                <TextBlock Classes="stub"
-                           Text="Заглушка. Здесь будет редактирование settings.json (порт, скорость, пути логов и БД, поведение переподключения) и сброс к значениям по умолчанию."/>
+                <StackPanel Margin="4" Spacing="8">
+                    <TextBlock Text="Разделы Дашборда" Classes="tileTitle"/>
+                    <!-- Какие протоколы показывать плитками; выбор сохраняется
+                    в settings.json (подписка на IsVisible — в App.axaml.cs) -->
+                    <ItemsControl ItemsSource="{Binding Sections}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ProtocolSectionViewModel">
+                                <CheckBox Content="{Binding Header}"
+                                          IsChecked="{Binding IsVisible}"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Classes="stub" Margin="0"
+                               Text="Остальные настройки (порт, скорость, пути) — по-прежнему в settings.json; редактор и сброс появятся позже."/>
+                </StackPanel>
             </TabItem>
 
         </TabControl>

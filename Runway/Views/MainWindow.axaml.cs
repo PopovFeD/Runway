@@ -18,7 +18,9 @@ public partial class MainWindow : Window
             {
                 vm.LogEntries.CollectionChanged += (_, _) =>
                 {
-                    if (vm.LogEntries.Count > 0)
+                    // Следуем за хвостом, только когда включена кнопка "⤓"
+                    // на Дашборде — иначе пользователь спокойно читает историю
+                    if (vm.FollowTail && vm.LogEntries.Count > 0)
                     {
                         LiveOutput.ScrollIntoView(vm.LogEntries.Count - 1);
                     }

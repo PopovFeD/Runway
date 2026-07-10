@@ -42,7 +42,8 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         SessionTracker? sessionTracker = null,
         int maxLogEntries = 500,
         string? initialEndpoint = null,
-        string? exportDirectory = null
+        string? exportDirectory = null,
+        IReadOnlyCollection<string>? hiddenSections = null
     )
     {
         _frameReader = frameReader;
@@ -61,6 +62,27 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         Logs = new LogsViewModel(appStore, _sessions, exportDirectory);
         Export = new ExportViewModel(appStore, _sessions, exportDirectory);
 
+        Sections.Add(
+            new ProtocolSectionViewModel(
+                "Telemetry",
+                "v1 · Telemetry (0x10)",
+                _tileTemperature,
+                _tileHumidity
+            )
+        );
+        Sections.Add(
+            new ProtocolSectionViewModel(
+                "Environment",
+                "v1 · Environment (0x11)",
+                _tilePressure,
+                _tileLight
+            )
+        );
+        foreach (var section in Sections)
+        {
+            section.IsVisible = hiddenSections?.Contains(section.ProtocolKey) != true;
+        }
+
         // Поток ДАННЫХ подписан здесь (конвейер живёт в этой VM);
         // состоянием подключения занимается Connection.
         foreach (var transport in transports)
@@ -78,34 +100,31 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     // Живой вывод для Дашборда. Ограничен через _boundedLog — история в БД.
     public ObservableCollection<string> LogEntries { get; } = new();
 
-    // --- Последние значения для плиток Дашборда ---
+    // --- Дашборд: разделы по протоколам (типам сообщений) ---
+    // Новый тип сообщения = новый раздел со своими плитками; какие разделы
+    // показывать — галочки во вкладке "Настройки" (persist в settings.json).
 
-    private string _lastTemperatureText = "—";
-    public string LastTemperatureText
+    private readonly TileViewModel _tileTemperature = new("Температура");
+    private readonly TileViewModel _tileHumidity = new("Влажность");
+    private readonly TileViewModel _tilePressure = new("Давление");
+    private readonly TileViewModel _tileLight = new("Освещённость");
+
+    public ObservableCollection<ProtocolSectionViewModel> Sections { get; } = new();
+
+    // Автопрокрутка терминала к последней записи — только когда включена
+    // кнопка-переключатель на Дашборде (использует code-behind MainWindow).
+    private bool _followTail = true;
+    public bool FollowTail
     {
-        get => _lastTemperatureText;
-        private set => SetProperty(ref _lastTemperatureText, value);
+        get => _followTail;
+        set => SetProperty(ref _followTail, value);
     }
 
-    private string _lastHumidityText = "—";
-    public string LastHumidityText
+    // FormattableString + Invariant: "24.53", а не "24,53" на русской локали
+    private static void SetTile(TileViewModel tile, FormattableString value, string updated)
     {
-        get => _lastHumidityText;
-        private set => SetProperty(ref _lastHumidityText, value);
-    }
-
-    private string _lastPressureText = "—";
-    public string LastPressureText
-    {
-        get => _lastPressureText;
-        private set => SetProperty(ref _lastPressureText, value);
-    }
-
-    private string _lastLightText = "—";
-    public string LastLightText
-    {
-        get => _lastLightText;
-        private set => SetProperty(ref _lastLightText, value);
+        tile.Value = FormattableString.Invariant(value);
+        tile.UpdatedAtText = updated;
     }
 
     // Вызывается напрямую из read-потока транспорта (см. SerialTransport.ReadLoop).
@@ -201,28 +220,17 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                 {
                     _boundedLog.Add(guiLine);
 
-                    // Плитки Дашборда: последние значения по типу пакета
+                    // Плитки Дашборда: последние значения + время обновления
+                    string updated = $"обновлено {DateTime.Now:HH:mm:ss}";
                     switch (uiPacket)
                     {
                         case TelemetryPacket t:
-                            LastTemperatureText = string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"{t.Temperature:F2} °C"
-                            );
-                            LastHumidityText = string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"{t.Humidity:F2} %"
-                            );
+                            SetTile(_tileTemperature, $"{t.Temperature:F2} °C", updated);
+                            SetTile(_tileHumidity, $"{t.Humidity:F2} %", updated);
                             break;
                         case EnvironmentPacket e:
-                            LastPressureText = string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"{e.PressureHpa:F2} hPa"
-                            );
-                            LastLightText = string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"{e.LightLux:F2} lx"
-                            );
+                            SetTile(_tilePressure, $"{e.PressureHpa:F2} hPa", updated);
+                            SetTile(_tileLight, $"{e.LightLux:F2} lx", updated);
                             break;
                     }
                 });

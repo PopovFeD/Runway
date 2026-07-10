@@ -190,7 +190,9 @@ public class MainWindowViewModelTelemetryStoreTests
         var store = new FakeAppStore();
         var vm = CreateViewModel(transport, store);
 
-        Assert.Equal("—", vm.LastTemperatureText);
+        var telemetryTiles = vm.Sections[0].Tiles;
+        var envTiles = vm.Sections[1].Tiles;
+        Assert.Equal("—", telemetryTiles[0].Value);
 
         transport.RaiseDataReceived(
             FrameTestHelper.BuildFrameBytes(1, (byte)MessageType.Telemetry, 1, TelemetryPayload)
@@ -200,15 +202,35 @@ public class MainWindowViewModelTelemetryStoreTests
             FrameTestHelper.BuildFrameBytes(1, (byte)MessageType.Environment, 2, envFrame.Payload)
         );
 
-        await WaitUntilAsync(() => vm.LastLightText != "—", TimeSpan.FromSeconds(2));
+        await WaitUntilAsync(() => envTiles[1].Value != "—", TimeSpan.FromSeconds(2));
 
-        Assert.Equal("24.53 °C", vm.LastTemperatureText);
-        Assert.Equal("51.28 %", vm.LastHumidityText);
-        Assert.Equal("1013.25 hPa", vm.LastPressureText);
-        Assert.Equal("347.50 lx", vm.LastLightText);
+        Assert.Equal("24.53 °C", telemetryTiles[0].Value);
+        Assert.Equal("51.28 %", telemetryTiles[1].Value);
+        Assert.Equal("1013.25 hPa", envTiles[0].Value);
+        Assert.Equal("347.50 lx", envTiles[1].Value);
+        // Внизу карточки — время последнего обновления, как в макете
+        Assert.StartsWith("обновлено ", telemetryTiles[0].UpdatedAtText);
 
         // Строка живого вывода — в лог-стиле, с меткой времени HH:mm:ss.fff
         Assert.All(vm.LogEntries, l => Assert.Matches(@"^\d{2}:\d{2}:\d{2}\.\d{3}  ", l));
+
+        vm.Dispose();
+    }
+
+    [Fact]
+    public void HiddenSections_FromSettings_StartInvisible_AndFollowTailDefaultsOn()
+    {
+        var transport = new FakeTransport();
+        var vm = new MainWindowViewModel(
+            new FrameReader(),
+            new[] { transport },
+            new ImmediateUiDispatcher(),
+            hiddenSections: new[] { "Environment" }
+        );
+
+        Assert.True(vm.Sections.First(s => s.ProtocolKey == "Telemetry").IsVisible);
+        Assert.False(vm.Sections.First(s => s.ProtocolKey == "Environment").IsVisible);
+        Assert.True(vm.FollowTail);
 
         vm.Dispose();
     }

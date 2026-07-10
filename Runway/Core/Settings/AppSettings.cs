@@ -22,4 +22,8 @@ public class AppSettings
 
     // Путь к SQLite-файлу с телеметрией (относительно каталога сборки, как и логи).
     public string DatabaseFilePath { get; set; } = "runway.db";
+
+    // Разделы Дашборда (по ProtocolKey), скрытые пользователем во вкладке
+    // "Настройки". Пустой список — показывать всё.
+    public List<string> HiddenDashboardSections { get; set; } = new();
 }
